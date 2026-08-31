@@ -1,0 +1,177 @@
+{
+  "requests": [
+    {
+      "id": 101,
+      "department_id": 1,
+      "department_code": "TMS",
+      "asset_id": "TRK-01",
+      "requested_start_time": "2026-08-31T08:49:11.961Z",
+      "duration_minutes": 120,
+      "defect_severity": 4,
+      "urgency_level": 0.78,
+      "status": "BUNDLED",
+      "notes": "Rail thermite weld fracture detected. Micro-cracking requires immediate clamping/replacement.",
+      "metadata": {
+        "reported_at": "2026-08-31T07:49:11.962Z",
+        "system_origin": "TMS"
+      }
+    },
+    {
+      "id": 102,
+      "department_id": 2,
+      "department_code": "SMMS",
+      "asset_id": "SIG-44",
+      "requested_start_time": "2026-08-31T09:04:11.962Z",
+      "duration_minutes": 90,
+      "defect_severity": 3,
+      "urgency_level": 0.62,
+      "status": "BUNDLED",
+      "notes": "Point machine interlocking delay detected. Signal failure risk at junction entry.",
+      "metadata": {
+        "reported_at": "2026-08-31T07:49:11.962Z",
+        "system_origin": "SMMS"
+      }
+    },
+    {
+      "id": 103,
+      "department_id": 3,
+      "department_code": "TDMS",
+      "asset_id": "OHE-09",
+      "requested_start_time": "2026-08-31T10:19:11.962Z",
+      "duration_minutes": 180,
+      "defect_severity": 3,
+      "urgency_level": 0.58,
+      "status": "BUNDLED",
+      "notes": "Overhead catenary mast tension drop exceeding 15%. Risk of pantograph entanglement.",
+      "metadata": {
+        "reported_at": "2026-08-31T07:49:11.962Z",
+        "system_origin": "TDMS"
+      }
+    }
+  ],
+  "assets": [
+    {
+      "id": 1,
+      "asset_id": "TRK-01",
+      "name": "Track Segment NDLS-1 (UP Main)",
+      "asset_type": "TRACK",
+      "line_section": "New Delhi - Kanpur Section",
+      "start_km": 0,
+      "end_km": 12,
+      "speed_limit_kmh": 130,
+      "status": "OPERATIONAL"
+    },
+    {
+      "id": 2,
+      "asset_id": "TRK-02",
+      "name": "Track Segment NDLS-2 (DN Main)",
+      "asset_type": "TRACK",
+      "line_section": "New Delhi - Kanpur Section",
+      "start_km": 12,
+      "end_km": 24,
+      "speed_limit_kmh": 110,
+      "status": "OPERATIONAL"
+    },
+    {
+      "id": 3,
+      "asset_id": "SIG-44",
+      "name": "Signal Post Point-44",
+      "asset_type": "SIGNAL",
+      "line_section": "Kanpur Central Outer",
+      "start_km": 8.5,
+      "end_km": 8.6,
+      "speed_limit_kmh": 130,
+      "status": "OPERATIONAL"
+    },
+    {
+      "id": 4,
+      "asset_id": "OHE-09",
+      "name": "OHE Traction Wire Section 9",
+      "asset_type": "OHE",
+      "line_section": "New Delhi - Aligarh Section",
+      "start_km": 20.2,
+      "end_km": 22.8,
+      "speed_limit_kmh": 130,
+      "status": "OPERATIONAL"
+    },
+    {
+      "id": 5,
+      "asset_id": "TRK-9",
+      "name": "Corridor Track-9 (Yard Lead)",
+      "asset_type": "TRACK",
+      "line_section": "Kanpur Yard Section",
+      "start_km": 44.1,
+      "end_km": 45.3,
+      "speed_limit_kmh": 30,
+      "status": "FAULT"
+    }
+  ],
+  "trains": [
+    {
+      "id": 1,
+      "train_number": "12301",
+      "name": "NDLS-HWH Rajdhani Express",
+      "priority_class": "RAJDHANI",
+      "corridor_id": "New Delhi - Kanpur Section",
+      "arrival_window_start": "2026-08-31T09:49:11.962Z",
+      "departure_window_end": "2026-08-31T11:19:11.962Z",
+      "status": "ON TIME"
+    },
+    {
+      "id": 2,
+      "train_number": "12259",
+      "name": "Sealdah Duronto Express",
+      "priority_class": "EXPRESS",
+      "corridor_id": "New Delhi - Kanpur Section",
+      "arrival_window_start": "2026-08-31T11:49:11.962Z",
+      "departure_window_end": "2026-08-31T13:04:11.962Z",
+      "status": "ON TIME"
+    },
+    {
+      "id": 3,
+      "train_number": "FRT-991",
+      "name": "Coal Freight Rake-991",
+      "priority_class": "FREIGHT",
+      "corridor_id": "New Delhi - Kanpur Section",
+      "arrival_window_start": "2026-08-31T13:49:11.962Z",
+      "departure_window_end": "2026-08-31T15:49:11.962Z",
+      "status": "DELAYED +5m"
+    }
+  ],
+  "blocks": [
+    {
+      "id": 2001,
+      "corridor_id": "SIG-44/TRK-01",
+      "bundled_request_ids": [
+        101,
+        102
+      ],
+      "scheduled_start": "2026-08-31T13:49:11.961000",
+      "scheduled_end": "2026-08-31T15:49:11.961000",
+      "allocated_safety_buffer": 15,
+      "controller_approval_status": "PENDING",
+      "saved_block_hours": 1.5,
+      "bundled_departments": [
+        "SMMS",
+        "TMS"
+      ],
+      "urgency_score": 0.78
+    },
+    {
+      "id": 2002,
+      "corridor_id": "OHE-09",
+      "bundled_request_ids": [
+        103
+      ],
+      "scheduled_start": "2026-08-31T13:19:11.962000",
+      "scheduled_end": "2026-08-31T16:19:11.962000",
+      "allocated_safety_buffer": 15,
+      "controller_approval_status": "PENDING",
+      "saved_block_hours": 0,
+      "bundled_departments": [
+        "TDMS"
+      ],
+      "urgency_score": 0.58
+    }
+  ]
+}
