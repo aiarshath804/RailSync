@@ -13,6 +13,7 @@ import { SettingsModal, AppSettingsState } from "./components/SettingsModal";
 import { ProfileModal, OperatorProfile } from "./components/ProfileModal";
 import { CadMapModal } from "./components/CadMapModal";
 import { AnalyticsView } from "./components/AnalyticsView";
+import { DataPipelineModal } from "./components/DataPipelineModal";
 import { motion, AnimatePresence } from "motion/react";
 import { Language, translations } from "./lib/translations";
 
@@ -31,6 +32,7 @@ export default function App() {
   const [isSettingsModalOpen, setIsSettingsModalOpen] = useState(false);
   const [isProfileModalOpen, setIsProfileModalOpen] = useState(false);
   const [isCadModalOpen, setIsCadModalOpen] = useState(false);
+  const [isDataPipelineModalOpen, setIsDataPipelineModalOpen] = useState(false);
   const [selectedAssetForCad, setSelectedAssetForCad] = useState<string | null>("TRK-01");
   const [selectedAssetForWorkOrder, setSelectedAssetForWorkOrder] = useState<string | null>("SIG-44B1");
 
@@ -198,6 +200,7 @@ export default function App() {
         onNotificationsClick={() => setIsNotificationsModalOpen(true)}
         onSettingsClick={() => setIsSettingsModalOpen(true)}
         onProfileClick={() => setIsProfileModalOpen(true)}
+        onDataPipelineClick={() => setIsDataPipelineModalOpen(true)}
         unreadAlertsCount={unreadAlertsCount}
       />
 
@@ -214,6 +217,7 @@ export default function App() {
           onOpenMaintenance={() => setActiveTab("corridors")}
           onOpenProfile={() => setIsProfileModalOpen(true)}
           onOpenAnalytics={() => setActiveTab("analytics")}
+          onOpenDataPipeline={() => setIsDataPipelineModalOpen(true)}
           activeTab={activeTab}
           showEmergencyTop={activeTab === "network"}
           isOpenMobile={isMobileSidebarOpen}
@@ -479,6 +483,16 @@ export default function App() {
         onClose={() => setIsCadModalOpen(false)}
         assetId={selectedAssetForCad}
         onCreateWorkOrder={handleOpenWorkOrder}
+      />
+
+      {/* Railway Data Pipeline & Ingestion Modal (Step 2) */}
+      <DataPipelineModal
+        isOpen={isDataPipelineModalOpen}
+        onClose={() => setIsDataPipelineModalOpen(false)}
+        onDataImported={() => {
+          fetch("/api/v1/optimize/generate-plan", { method: "POST" })
+            .catch(err => console.error("Optimize trigger error:", err));
+        }}
       />
 
     </div>

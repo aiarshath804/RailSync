@@ -65,7 +65,14 @@ class FallbackHeuristicSolver:
         block_id_counter = 2001
 
         for cluster in spatial_clusters:
-            cluster.sort(key=lambda x: x.get("urgency_level", 0.0), reverse=True)
+            # Sort cluster by safety_override (mandatory first) and priority_score / urgency_score
+            cluster.sort(
+                key=lambda x: (
+                    1 if x.get("safety_override") else 0,
+                    float(x.get("priority_score") or (float(x.get("urgency_level", 0.5)) * 100.0))
+                ),
+                reverse=True
+            )
             used_req_ids = set()
 
             for i, req in enumerate(cluster):
@@ -108,6 +115,9 @@ class FallbackHeuristicSolver:
                 saved_mins = individual_sum - max_dur
                 saved_hours = max(0.0, round(saved_mins / 60.0, 2))
 
+                max_p_score = max(float(r.get("priority_score") or (float(r.get("urgency_level", 0.5)) * 100.0)) for r in bundle)
+                has_safety_override = any(bool(r.get("safety_override")) for r in bundle)
+
                 optimized_blocks.append({
                     "id": block_id_counter,
                     "corridor_id": corridor_label,
@@ -118,7 +128,9 @@ class FallbackHeuristicSolver:
                     "controller_approval_status": "PENDING",
                     "saved_block_hours": saved_hours,
                     "bundled_departments": list(set(r.get("department_code", "TMS") for r in bundle)),
-                    "urgency_score": round(max(r.get("urgency_level", 0.0) for r in bundle), 2)
+                    "urgency_score": round(max_p_score / 100.0, 2),
+                    "priority_score": round(max_p_score, 1),
+                    "safety_override": has_safety_override
                 })
                 block_id_counter += 1
 

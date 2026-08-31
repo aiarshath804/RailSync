@@ -2,6 +2,7 @@ from datetime import datetime
 from typing import Dict, Any, Optional, List
 from pydantic import BaseModel, Field, field_validator
 from backend.models import DepartmentEnum, TrainPriorityEnum
+from backend.pipeline.normalizer import SeverityNormalizer, LocationNormalizer
 
 # -------------------------------------------------------------
 # Input Payloads (Multi-Format Department Systems)
@@ -10,7 +11,7 @@ from backend.models import DepartmentEnum, TrainPriorityEnum
 class TMSPayload(BaseModel):
     """
     Track Management System payload schema.
-    Typically tracks track structural integrity, rail welds, sleeper faults, etc.
+    Tracks track structural integrity, rail welds, sleeper faults, etc.
     """
     track_code: str = Field(..., alias="trackCode")
     defect_id: str = Field(..., alias="defectId")
@@ -91,17 +92,18 @@ class DataAdapterPipeline:
         """
         Adapts TMS track defects to the standardized schema.
         """
-        # Map TMS 1-5 severity scale directly
+        normalized_sev = SeverityNormalizer.normalize_severity(payload.severity_rank)
         return StandardizedMaintenanceRequest(
             department=DepartmentEnum.TMS,
-            asset_id=payload.track_code,
+            asset_id=payload.track_code.upper().strip(),
             requested_start_time=payload.proposed_date,
             duration_minutes=payload.required_repair_duration,
-            defect_severity=payload.severity_rank,
+            defect_severity=normalized_sev,
             notes=f"Defect ID: {payload.defect_id}. {payload.inspector_notes or ''}",
             metadata={
                 "reported_at": payload.reported_at.isoformat(),
-                "system_origin": "TMS"
+                "system_origin": "TMS",
+                "defect_id": payload.defect_id
             }
         )
 
@@ -109,21 +111,21 @@ class DataAdapterPipeline:
     def transform_smms(payload: SMMSPayload) -> StandardizedMaintenanceRequest:
         """
         Adapts SMMS signal/telecom faults.
-        Maps HIGH/MEDIUM/LOW flags to standard 1-5 severity scale.
+        Uses centralized SeverityNormalizer.
         """
-        severity_map = {"HIGH": 5, "MEDIUM": 3, "LOW": 1}
-        mapped_severity = severity_map.get(payload.criticality_flag.upper(), 3)
+        mapped_severity = SeverityNormalizer.normalize_severity(payload.criticality_flag)
 
         return StandardizedMaintenanceRequest(
             department=DepartmentEnum.SMMS,
-            asset_id=payload.signal_post_id,
+            asset_id=payload.signal_post_id.upper().strip(),
             requested_start_time=payload.target_window_start,
             duration_minutes=payload.repair_time_est,
             defect_severity=mapped_severity,
             notes=f"Signal Post Fault: {payload.fault_type}. Hours active: {payload.hours_since_detection}",
             metadata={
                 "hours_since_detection": payload.hours_since_detection,
-                "system_origin": "SMMS"
+                "system_origin": "SMMS",
+                "fault_type": payload.fault_type
             }
         )
 
@@ -131,25 +133,21 @@ class DataAdapterPipeline:
     def transform_tdms(payload: TDMSPayload) -> StandardizedMaintenanceRequest:
         """
         Adapts TDMS Overhead Equipment faults.
-        Maps tension drop to a severity rank.
+        Uses centralized TDMS tension drop normalizer.
         """
-        # High tension drop = High severity
-        severity = 3
-        if payload.tension_drop_percentage > 25:
-            severity = 5
-        elif payload.tension_drop_percentage > 10:
-            severity = 4
+        severity = SeverityNormalizer.normalize_tdms_tension_drop(payload.tension_drop_percentage)
 
         return StandardizedMaintenanceRequest(
             department=DepartmentEnum.TDMS,
-            asset_id=payload.section_id,
+            asset_id=payload.section_id.upper().strip(),
             requested_start_time=payload.earliest_allowed_start,
             duration_minutes=payload.duration_needed,
             defect_severity=severity,
             notes=f"OHE Fault: {payload.ohe_defect_type}. Tension Drop: {payload.tension_drop_percentage}%",
             metadata={
                 "tension_drop_percentage": payload.tension_drop_percentage,
-                "system_origin": "TDMS"
+                "system_origin": "TDMS",
+                "defect_type": payload.ohe_defect_type
             }
         )
 
@@ -158,19 +156,22 @@ class DataAdapterPipeline:
         """
         Adapts COA train scheduling timelines and priorities.
         """
-        priority_map = {
-            "RAJDHANI": TrainPriorityEnum.RAJDHANI,
-            "EXPRESS": TrainPriorityEnum.EXPRESS,
-            "FREIGHT": TrainPriorityEnum.FREIGHT
-        }
-        mapped_priority = priority_map.get(payload.priority.upper(), TrainPriorityEnum.EXPRESS)
+        priority_str = payload.priority.upper().strip()
+        if "RAJDHANI" in priority_str or "VANDE" in priority_str or "SHATABDI" in priority_str:
+            mapped_priority = TrainPriorityEnum.RAJDHANI
+        elif "FREIGHT" in priority_str or "GOODS" in priority_str:
+            mapped_priority = TrainPriorityEnum.FREIGHT
+        else:
+            mapped_priority = TrainPriorityEnum.EXPRESS
+
         status = "RUNNING" if payload.delay_minutes <= 0 else f"DELAYED BY {payload.delay_minutes} MINS"
+        corridor = LocationNormalizer.normalize_corridor(payload.corridor_id)
 
         return StandardizedTrainSchedule(
-            train_number=payload.train_no,
-            name=payload.train_name,
+            train_number=payload.train_no.strip(),
+            name=payload.train_name.strip(),
             priority_class=mapped_priority,
-            corridor_id=payload.corridor_id,
+            corridor_id=corridor,
             arrival_window_start=payload.scheduled_arrival,
             departure_window_end=payload.scheduled_departure,
             status=status

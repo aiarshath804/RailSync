@@ -34,6 +34,7 @@ interface HeaderProps {
   onSettingsClick?: () => void;
   onProfileClick?: () => void;
   onOpenAdvisoryModal?: () => void;
+  onDataPipelineClick?: () => void;
   unreadAlertsCount?: number;
   opacityLevel?: number;
   setOpacityLevel?: (val: number) => void;
@@ -54,6 +55,7 @@ export const Header: React.FC<HeaderProps> = ({
   onSettingsClick,
   onProfileClick,
   onOpenAdvisoryModal,
+  onDataPipelineClick,
   unreadAlertsCount = 0
 }) => {
   const [fontSize, setFontSize] = useState<"sm" | "base" | "lg">("base");
@@ -211,6 +213,18 @@ export const Header: React.FC<HeaderProps> = ({
                 className="w-full bg-slate-50 border border-slate-300 rounded-md pl-8 pr-3 py-1 text-xs text-slate-900 placeholder-slate-400 focus:outline-none focus:border-blue-800 focus:ring-1 focus:ring-blue-800 font-sans shadow-inner"
               />
             </div>
+          )}
+
+          {/* Dataset Pipeline Button */}
+          {onDataPipelineClick && (
+            <button
+              onClick={onDataPipelineClick}
+              className="text-amber-900 bg-amber-100 hover:bg-amber-200 border border-amber-300 font-bold px-2.5 py-1.5 rounded-md text-xs font-mono flex items-center space-x-1.5 transition cursor-pointer shadow-xs"
+              title="Open Railway Data Pipeline & Dataset Manager"
+            >
+              <Activity className="w-3.5 h-3.5 text-amber-800" />
+              <span className="hidden sm:inline">DATA PIPELINE</span>
+            </button>
           )}
 
           {/* Quick Notifications Button */}
