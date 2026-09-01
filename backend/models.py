@@ -89,6 +89,14 @@ class MaintenanceRequest(Base):
     impact_score = Column(Float, default=0.5)
     priority_score = Column(Float, default=0.5)
     priority_level = Column(String(20), default="MEDIUM")
+    safety_override = Column(Integer, default=0)
+    override_reason = Column(String(255), nullable=True)
+    safety_classification = Column(String(50), default="SAFE")
+    effective_deadline = Column(String(50), nullable=True)
+    isolation_requirements = Column(Text, nullable=True)
+    safety_validation_status = Column(String(50), default="SAFE")
+    scoring_method = Column(String(50), default="deterministic_hybrid")
+    scored_at = Column(String(50), nullable=True)
     metadata_json = Column(JSON, nullable=True)
 
 class TrainSchedule(Base):
@@ -121,3 +129,20 @@ class OptimizedBlock(Base):
     saved_block_hours = Column(Float, default=0.0)
     bundled_departments = Column(JSON, nullable=True)
     urgency_score = Column(Float, default=0.5)
+    safety_validation_status = Column(String(50), default="SAFE")
+    safety_violations = Column(Text, nullable=True)
+
+class SafetyAuditLog(Base):
+    __tablename__ = "safety_audit_logs"
+
+    id = Column(Integer, primary_key=True, index=True)
+    timestamp = Column(DateTime, default=datetime.datetime.now, nullable=False)
+    controller_id = Column(String(100), nullable=False)
+    target_type = Column(String(50), nullable=False) # BLOCK, REQUEST
+    target_id = Column(String(100), nullable=False)
+    original_status = Column(String(50), nullable=False)
+    override_action = Column(String(100), nullable=False)
+    override_reason = Column(Text, nullable=False)
+    risk_assessment = Column(Text, nullable=True)
+    ip_address = Column(String(50), nullable=True)
+    signature = Column(String(255), nullable=True)

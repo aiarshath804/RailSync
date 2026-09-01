@@ -439,3 +439,10 @@ class PrioritizationService:
             r["prioritization_rank"] = rank
 
         return evaluated_requests
+
+    @classmethod
+    def get_configuration_summary(cls) -> Dict[str, Any]:
+        """
+        Returns the centralized prioritization configuration, weights, and rules.
+        """
+        return PrioritizationConfig.get_summary()

@@ -13,6 +13,7 @@ export interface TranslationSchema {
   // Navigation Tabs
   navNetwork: string;
   navCorridors: string;
+  navPrioritization: string;
   navSchedules: string;
   navAssets: string;
   navAnalytics: string;
@@ -152,8 +153,10 @@ export const translations: Record<Language, TranslationSchema> = {
     // Navigation Tabs
     navNetwork: "National Network View",
     navCorridors: "Corridors Monitoring",
+    navPrioritization: "AI Prioritization Engine",
     navSchedules: "Schedules & Advisories",
     navAssets: "Asset Registry",
+    navAnalytics: "Operations Analytics",
     
     // Sidebar
     emergencyHalt: "EMERGENCY HALT",
@@ -236,7 +239,6 @@ export const translations: Record<Language, TranslationSchema> = {
     viewCadMap: "View CAD Schematic Map",
 
     // Analytics View
-    navAnalytics: "Analytics & Impact",
     analyticsTitle: "Cross-Departmental Operational Analytics & Efficiency Audit",
     analyticsSubtitle: "Quantitative evaluation of AI-driven block bundling, track asset availability gains, and passenger delay mitigation.",
     analyticsExecutiveSummary: "EXECUTIVE AUDIT SUMMARY",
@@ -289,6 +291,7 @@ export const translations: Record<Language, TranslationSchema> = {
     // Navigation Tabs
     navNetwork: "राष्ट्रीय नेटवर्क दृश्य",
     navCorridors: "कॉरिडोर निगरानी",
+    navPrioritization: "एआई प्राथमिकता इंजन",
     navSchedules: "समय-सारणी व परामर्श",
     navAssets: "परिसंपत्ति रजिस्टर",
     
@@ -426,8 +429,10 @@ export const translations: Record<Language, TranslationSchema> = {
     // Navigation Tabs
     navNetwork: "தேசிய நெட்வொர்க் பார்வை",
     navCorridors: "பாதை கண்காணிப்பு",
+    navPrioritization: "ஏஐ முன்னுரிமை எஞ்சின்",
     navSchedules: "அட்டவணை மற்றும் ஆலோசனைகள்",
     navAssets: "சொத்து பதிவேடு",
+    navAnalytics: "செயல்பாட்டு பகுப்பாய்வு",
     
     // Sidebar
     emergencyHalt: "அவசர நிறுத்தம்",
@@ -510,7 +515,6 @@ export const translations: Record<Language, TranslationSchema> = {
     viewCadMap: "சிஏடி வரைபடம் காண்க",
 
     // Analytics View
-    navAnalytics: "பகுப்பாய்வு மற்றும் தாக்கம்",
     analyticsTitle: "துறைகளுக்கிடையேயான செயல்பாட்டு பகுப்பாய்வு & செயல்திறன் தணிக்கை",
     analyticsSubtitle: "ஏஐ-இயக்கப்பட்ட தடுப்பு இணைப்பு, சொத்து கிடைக்கும் தன்மை அதிகரிப்பு மற்றும் ரயில் தாமதத்தைக் குறைத்தல்.",
     analyticsExecutiveSummary: "நிர்வாக தணிக்கை சுருக்கம்",

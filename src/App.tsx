@@ -5,6 +5,7 @@ import { CorridorsView } from "./components/CorridorsView";
 import { NetworkView } from "./components/NetworkView";
 import { AssetsView } from "./components/AssetsView";
 import { SchedulesView } from "./components/SchedulesView";
+import { PrioritizationView } from "./components/PrioritizationView";
 import { EmergencyModal } from "./components/EmergencyModal";
 import { WorkOrderModal } from "./components/WorkOrderModal";
 import { AIInsightsModal } from "./components/AIInsightsModal";
@@ -14,6 +15,7 @@ import { ProfileModal, OperatorProfile } from "./components/ProfileModal";
 import { CadMapModal } from "./components/CadMapModal";
 import { AnalyticsView } from "./components/AnalyticsView";
 import { DataPipelineModal } from "./components/DataPipelineModal";
+import { SafetyGuardrailModal } from "./components/SafetyGuardrailModal";
 import { motion, AnimatePresence } from "motion/react";
 import { Language, translations } from "./lib/translations";
 
@@ -33,6 +35,7 @@ export default function App() {
   const [isProfileModalOpen, setIsProfileModalOpen] = useState(false);
   const [isCadModalOpen, setIsCadModalOpen] = useState(false);
   const [isDataPipelineModalOpen, setIsDataPipelineModalOpen] = useState(false);
+  const [isSafetyModalOpen, setIsSafetyModalOpen] = useState(false);
   const [selectedAssetForCad, setSelectedAssetForCad] = useState<string | null>("TRK-01");
   const [selectedAssetForWorkOrder, setSelectedAssetForWorkOrder] = useState<string | null>("SIG-44B1");
 
@@ -201,6 +204,7 @@ export default function App() {
         onSettingsClick={() => setIsSettingsModalOpen(true)}
         onProfileClick={() => setIsProfileModalOpen(true)}
         onDataPipelineClick={() => setIsDataPipelineModalOpen(true)}
+        onSafetyGuardrailClick={() => setIsSafetyModalOpen(true)}
         unreadAlertsCount={unreadAlertsCount}
       />
 
@@ -217,7 +221,9 @@ export default function App() {
           onOpenMaintenance={() => setActiveTab("corridors")}
           onOpenProfile={() => setIsProfileModalOpen(true)}
           onOpenAnalytics={() => setActiveTab("analytics")}
+          onOpenPrioritization={() => setActiveTab("prioritization")}
           onOpenDataPipeline={() => setIsDataPipelineModalOpen(true)}
+          onOpenSafetyGuardrail={() => setIsSafetyModalOpen(true)}
           activeTab={activeTab}
           showEmergencyTop={activeTab === "network"}
           isOpenMobile={isMobileSidebarOpen}
@@ -260,6 +266,24 @@ export default function App() {
                 className="flex-1 flex flex-col"
               >
                 <NetworkView lang={lang} />
+              </motion.div>
+            )}
+
+            {activeTab === "prioritization" && (
+              <motion.div
+                key="prioritization"
+                initial={{ opacity: 0, y: 8 }}
+                animate={{ opacity: 1, y: 0 }}
+                exit={{ opacity: 0, y: -8 }}
+                transition={{ duration: 0.18 }}
+                className="flex-1 flex flex-col"
+              >
+                <PrioritizationView
+                  lang={lang}
+                  onSelectRequest={(req) => {
+                    handleOpenWorkOrder(req.asset_id);
+                  }}
+                />
               </motion.div>
             )}
 
@@ -490,6 +514,16 @@ export default function App() {
         isOpen={isDataPipelineModalOpen}
         onClose={() => setIsDataPipelineModalOpen(false)}
         onDataImported={() => {
+          fetch("/api/v1/optimize/generate-plan", { method: "POST" })
+            .catch(err => console.error("Optimize trigger error:", err));
+        }}
+      />
+
+      {/* Railway Safety Constraints & Guardrail Modal (Step 4) */}
+      <SafetyGuardrailModal
+        isOpen={isSafetyModalOpen}
+        onClose={() => setIsSafetyModalOpen(false)}
+        onPlanUpdated={() => {
           fetch("/api/v1/optimize/generate-plan", { method: "POST" })
             .catch(err => console.error("Optimize trigger error:", err));
         }}

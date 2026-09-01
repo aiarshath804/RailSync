@@ -1,19 +1,20 @@
 from datetime import datetime
-from typing import List, Dict, Any
+from typing import List, Dict, Any, Optional
 from backend.core.constants import MAX_SPATIAL_PROXIMITY_KM, DEFAULT_TIME_PROXIMITY_MINUTES
+from backend.services.safety_guardrail_service import SafetyGuardrailService
 
 class BundlingService:
     @staticmethod
     def parse_time(val: Any) -> datetime:
-        if isinstance(val, datetime):
-            return val
-        if isinstance(val, str):
-            return datetime.fromisoformat(val.replace("Z", "+00:00").split("+")[0])
-        return datetime.now()
+        return SafetyGuardrailService.parse_time(val)
 
     @classmethod
-    def can_bundle(cls, req_a: Dict[str, Any], req_b: Dict[str, Any], assets: List[Dict[str, Any]]) -> bool:
-        # Cross-departmental tasks can be bundled
+    def can_bundle(cls, req_a: Dict[str, Any], req_b: Dict[str, Any], assets: Optional[List[Dict[str, Any]]] = None) -> bool:
+        """
+        Determines whether two maintenance requests can be safely bundled together:
+        Enforces both spatial/temporal proximity and authoritative railway safety compatibility rules.
+        """
+        # 1. Temporal check
         time_a = cls.parse_time(req_a.get("requested_start_time"))
         time_b = cls.parse_time(req_b.get("requested_start_time"))
         
@@ -21,28 +22,31 @@ class BundlingService:
         if time_delta_mins > DEFAULT_TIME_PROXIMITY_MINUTES:
             return False
 
-        # Spatial check: find assets
-        asset_a = next((a for a in assets if a.get("asset_id") == req_a.get("asset_id")), None)
-        asset_b = next((a for a in assets if a.get("asset_id") == req_b.get("asset_id")), None)
+        # 2. Spatial lookup
+        asset_a = next((a for a in (assets or []) if a.get("asset_id") == req_a.get("asset_id")), None)
+        asset_b = next((a for a in (assets or []) if a.get("asset_id") == req_b.get("asset_id")), None)
         
         if asset_a and asset_b:
-            start_a = asset_a.get("start_km", 0.0)
-            end_a = asset_a.get("end_km", start_a)
-            start_b = asset_b.get("start_km", 0.0)
-            end_b = asset_b.get("end_km", start_b)
+            start_a = float(asset_a.get("start_km", 0.0))
+            end_a = float(asset_a.get("end_km", start_a))
+            start_b = float(asset_b.get("start_km", 0.0))
+            end_b = float(asset_b.get("end_km", start_b))
             
-            # Distance between intervals
             dist = max(0.0, max(start_a, start_b) - min(end_a, end_b))
-            if dist <= MAX_SPATIAL_PROXIMITY_KM:
-                return True
-        
-        return True # Default to feasible bundling if within corridor
+            if dist > MAX_SPATIAL_PROXIMITY_KM:
+                return False
+
+        # 3. Authoritative Safety Compatibility Check
+        safety_compat = SafetyGuardrailService.check_bundle_compatibility(
+            req_a, req_b, asset_a=asset_a, asset_b=asset_b
+        )
+        return safety_compat["is_compatible"]
 
     @classmethod
     def create_bundled_clusters(
         cls, 
         requests: List[Dict[str, Any]], 
-        assets: List[Dict[str, Any]]
+        assets: Optional[List[Dict[str, Any]]] = None
     ) -> List[List[Dict[str, Any]]]:
         if not requests:
             return []
@@ -56,9 +60,8 @@ class BundlingService:
             to_remove = []
             
             for other in unassigned:
-                # Check if other can bundle with any member of cluster
-                if any(cls.can_bundle(other, member, assets) for member in cluster):
-                    # Check department diversity (prefer mixing TMS, SMMS, TDMS)
+                # Check if other can bundle safely with all existing members of cluster
+                if all(cls.can_bundle(other, member, assets) for member in cluster):
                     cluster.append(other)
                     to_remove.append(other)
             

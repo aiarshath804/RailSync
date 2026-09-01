@@ -409,13 +409,14 @@ class RailSyncRepository:
 
                 bundled_json = json.dumps(b.get("bundled_request_ids", []))
                 depts_json = json.dumps(b.get("bundled_departments", []))
+                violations_json = json.dumps(b.get("safety_violations", [])) if isinstance(b.get("safety_violations"), list) else (b.get("safety_violations") or "")
 
                 cursor.execute("""
                 INSERT INTO optimized_blocks (
                     id, corridor_id, bundled_request_ids, scheduled_start, scheduled_end,
                     allocated_safety_buffer, controller_approval_status, saved_block_hours,
-                    bundled_departments, urgency_score
-                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?);
+                    bundled_departments, urgency_score, safety_validation_status, safety_violations
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?);
                 """, (
                     b.get("id"),
                     b.get("corridor_id", "NDLS-HWH-01"),
@@ -426,7 +427,9 @@ class RailSyncRepository:
                     b.get("controller_approval_status", "PENDING"),
                     b.get("saved_block_hours", 0.0),
                     depts_json,
-                    b.get("urgency_score", 0.5)
+                    b.get("urgency_score", 0.5),
+                    b.get("safety_validation_status", "SAFE"),
+                    violations_json
                 ))
 
                 # Update bundled status for maintenance requests
@@ -456,6 +459,11 @@ class RailSyncRepository:
                     item["bundled_departments"] = json.loads(item["bundled_departments"])
                 except Exception:
                     item["bundled_departments"] = []
+                try:
+                    if item.get("safety_violations") and item["safety_violations"].startswith("["):
+                        item["safety_violations"] = json.loads(item["safety_violations"])
+                except Exception:
+                    pass
                 results.append(item)
             return results
         finally:
@@ -486,5 +494,75 @@ class RailSyncRepository:
 
             conn.commit()
             return True
+        finally:
+            conn.close()
+
+    # -------------------------------------------------------------
+    # Safety Guardrails & Audit Logging
+    # -------------------------------------------------------------
+    def save_safety_audit_log(
+        self,
+        controller_id: str,
+        target_type: str,
+        target_id: str,
+        original_status: str,
+        override_action: str,
+        override_reason: str,
+        risk_assessment: Optional[str] = None,
+        ip_address: Optional[str] = None,
+        signature: Optional[str] = None
+    ) -> int:
+        conn = get_connection()
+        try:
+            cursor = conn.cursor()
+            now_iso = datetime.datetime.now().isoformat()
+            cursor.execute("""
+            INSERT INTO safety_audit_logs (
+                timestamp, controller_id, target_type, target_id, original_status,
+                override_action, override_reason, risk_assessment, ip_address, signature
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?);
+            """, (
+                now_iso, controller_id, target_type, str(target_id), original_status,
+                override_action, override_reason, risk_assessment, ip_address, signature
+            ))
+            conn.commit()
+            return cursor.lastrowid
+        finally:
+            conn.close()
+
+    def get_safety_audit_logs(self, limit: int = 50) -> List[Dict[str, Any]]:
+        conn = get_connection()
+        try:
+            cursor = conn.cursor()
+            cursor.execute("""
+            SELECT * FROM safety_audit_logs ORDER BY id DESC LIMIT ?;
+            """, (limit,))
+            rows = cursor.fetchall()
+            return [dict(r) for r in rows]
+        finally:
+            conn.close()
+
+    def update_request_safety_guardrails(
+        self,
+        request_id: int,
+        safety_classification: str,
+        effective_deadline: Optional[str] = None,
+        isolation_requirements: Optional[List[str]] = None,
+        safety_validation_status: str = "SAFE"
+    ) -> bool:
+        conn = get_connection()
+        try:
+            cursor = conn.cursor()
+            iso_str = json.dumps(isolation_requirements or [])
+            cursor.execute("""
+            UPDATE maintenance_requests SET
+                safety_classification = ?,
+                effective_deadline = ?,
+                isolation_requirements = ?,
+                safety_validation_status = ?
+            WHERE id = ?;
+            """, (safety_classification, effective_deadline, iso_str, safety_validation_status, request_id))
+            conn.commit()
+            return cursor.rowcount > 0
         finally:
             conn.close()

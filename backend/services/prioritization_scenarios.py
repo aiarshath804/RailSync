@@ -26,6 +26,16 @@ def get_demo_train_schedules() -> List[Dict[str, Any]]:
             "status": "RUNNING"
         },
         {
+            "train_number": "22436",
+            "name": "Vande Bharat Express",
+            "priority_class": "VANDE BHARAT",
+            "corridor_id": "NDLS-HWH-01",
+            "arrival_window_start": (now + datetime.timedelta(hours=3)).isoformat(),
+            "departure_window_end": (now + datetime.timedelta(hours=4, minutes=15)).isoformat(),
+            "delay_minutes": 0,
+            "status": "RUNNING"
+        },
+        {
             "train_number": "12260",
             "name": "Sealdah Duronto Express",
             "priority_class": "RAJDHANI",
@@ -53,6 +63,16 @@ def get_demo_train_schedules() -> List[Dict[str, Any]]:
             "arrival_window_start": (now + datetime.timedelta(hours=9)).isoformat(),
             "departure_window_end": (now + datetime.timedelta(hours=10)).isoformat(),
             "delay_minutes": 0,
+            "status": "RUNNING"
+        },
+        {
+            "train_number": "12311",
+            "name": "Kalka Mail Express",
+            "priority_class": "EXPRESS",
+            "corridor_id": "NDLS-HWH-01",
+            "arrival_window_start": (now + datetime.timedelta(hours=11)).isoformat(),
+            "departure_window_end": (now + datetime.timedelta(hours=12)).isoformat(),
+            "delay_minutes": 5,
             "status": "RUNNING"
         },
         {
@@ -102,13 +122,13 @@ class PrioritizationScenarioRunner:
             "department_code": "SMMS",
             "asset_id": "SIG-44",
             "corridor_id": "NDLS-HWH-01",
-            "defect_type": "POINT MACHINE FAILURE",
+            "defect_type": "SIGNAL CIRCUIT DRIFT",
             "work_type": "CORRECTIVE_MAINTENANCE",
-            "notes": "Point machine 12B sluggish throw time, approaching mandatory SLA window",
+            "notes": "Track feed circuit voltage fluctuation, approaching mandatory SLA window (<12h)",
             "defect_severity": 3,
             "duration_minutes": 60,
             "reported_at": (now - datetime.timedelta(hours=18)).isoformat(),
-            "due_date": (now + datetime.timedelta(hours=6)).isoformat(), # SLA due in 6 hours!
+            "due_date": (now + datetime.timedelta(hours=5)).isoformat(), # SLA due in 5 hours!
             "requested_start_time": (now + datetime.timedelta(hours=2)).isoformat()
         }
         res_b = PrioritizationService.evaluate_request(scenario_b_req, train_schedules=trains)
@@ -124,7 +144,7 @@ class PrioritizationScenarioRunner:
             "corridor_id": "NDLS-HWH-01",
             "defect_type": "CATENARY WEAR",
             "work_type": "ROUTINE_ADJUSTMENT",
-            "notes": "Minor tension adjustment on main high-speed corridor",
+            "notes": "Tension adjustment on main high-speed corridor with heavy Rajdhani / Vande Bharat traffic",
             "defect_severity": 3,
             "duration_minutes": 120,
             "reported_at": (now - datetime.timedelta(hours=4)).isoformat(),
@@ -203,7 +223,7 @@ class PrioritizationScenarioRunner:
                     "description": "Demonstrates SLA proximity and degradation escalation for impending breach.",
                     "request": scenario_b_req,
                     "evaluation": res_b,
-                    "verified": res_b["urgency_score"] >= 60.0
+                    "verified": res_b["urgency_score"] >= 65.0 and res_b["priority_level"] in ["HIGH", "CRITICAL"]
                 },
                 {
                     "id": "SCENARIO_C",
@@ -211,7 +231,7 @@ class PrioritizationScenarioRunner:
                     "description": "Demonstrates operational impact boost on corridors hosting Rajdhani trains.",
                     "request": scenario_c_req,
                     "evaluation": res_c,
-                    "verified": res_c["impact_score"] >= 60.0
+                    "verified": res_c["impact_score"] >= 65.0
                 },
                 {
                     "id": "SCENARIO_D",

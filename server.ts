@@ -5,18 +5,18 @@ import { createServer as createViteServer } from "vite";
 import { createProxyMiddleware } from "http-proxy-middleware";
 
 const PORT = 3000;
-const FASTAPI_PORT = parseInt(process.env.FASTAPI_PORT || "8000", 10);
-const FASTAPI_TARGET = `http://127.0.0.1:${FASTAPI_PORT}`;
+const PYTHON_PORT = 5001;
+const FASTAPI_TARGET = `http://127.0.0.1:${PYTHON_PORT}`;
 
 let fastapiProcess: ChildProcess | null = null;
 
 function startFastAPIServer(): void {
   if (fastapiProcess) return;
-  console.log(`[RailSync] Starting authoritative Python backend on port ${FASTAPI_PORT}...`);
+  console.log(`[RailSync] Starting authoritative Python backend on port ${PYTHON_PORT}...`);
   
   fastapiProcess = spawn(
     "python3",
-    ["backend/server.py", "--port", FASTAPI_PORT.toString(), "--host", "127.0.0.1"],
+    ["backend/server.py", "--port", PYTHON_PORT.toString(), "--host", "127.0.0.1"],
     {
       stdio: "inherit",
       env: {

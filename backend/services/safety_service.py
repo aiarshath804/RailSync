@@ -1,16 +1,17 @@
-from datetime import datetime, timedelta
+"""
+RailSync Safety Service Compatibility Wrapper.
+Provides backwards-compatible interface while utilizing the authoritative SafetyGuardrailService.
+"""
+
+from datetime import datetime
 from typing import List, Dict, Any, Tuple
-from backend.core.constants import DEFAULT_SAFETY_BUFFER_MINUTES, TrainPriorityEnum
+from backend.services.safety_guardrail_service import SafetyGuardrailService
+from backend.core.constants import DEFAULT_SAFETY_BUFFER_MINUTES
 
 class SafetyService:
     @staticmethod
     def parse_time(val: Any) -> datetime:
-        if isinstance(val, datetime):
-            return val
-        if isinstance(val, str):
-            # Handle ISO string format
-            return datetime.fromisoformat(val.replace("Z", "+00:00").split("+")[0])
-        return datetime.now()
+        return SafetyGuardrailService.parse_time(val)
 
     @classmethod
     def validate_train_headway(
@@ -20,27 +21,28 @@ class SafetyService:
         trains: List[Dict[str, Any]], 
         buffer_minutes: int = DEFAULT_SAFETY_BUFFER_MINUTES
     ) -> Tuple[bool, List[str]]:
-        violations = []
-        buf = timedelta(minutes=buffer_minutes)
-        
-        for train in trains:
-            try:
-                arr = cls.parse_time(train.get("arrival_window_start"))
-                dep = cls.parse_time(train.get("departure_window_end"))
-                train_prio = train.get("priority_class", "")
-                t_num = train.get("train_number", "UNKNOWN")
-                
-                # Check overlap with safety buffer
-                t_window_start = arr - buf
-                t_window_end = dep + buf
-                
-                if max(block_start, t_window_start) < min(block_end, t_window_end):
-                    if train_prio == TrainPriorityEnum.RAJDHANI.value:
-                        violations.append(
-                            f"Safety conflict: Block ({block_start.strftime('%H:%M')}-{block_end.strftime('%H:%M')}) intersects with High-Priority Rajdhani {t_num} window ({arr.strftime('%H:%M')}-{dep.strftime('%H:%M')}) within {buffer_minutes}m buffer"
-                        )
-            except Exception:
-                continue
-                
-        is_safe = len(violations) == 0
-        return is_safe, violations
+        dummy_block = {
+            "id": 1,
+            "scheduled_start": block_start.isoformat(),
+            "scheduled_end": block_end.isoformat(),
+            "allocated_safety_buffer": buffer_minutes,
+            "bundled_request_ids": []
+        }
+        report = SafetyGuardrailService.validate_optimized_plan(
+            [dummy_block],
+            [],
+            trains
+        )
+        return report["passed"], report["violations"]
+
+    @classmethod
+    def evaluate_request_safety(cls, request: Dict[str, Any], all_requests=None, train_schedules=None) -> Dict[str, Any]:
+        return SafetyGuardrailService.evaluate_request_safety(request, all_requests=all_requests, train_schedules=train_schedules)
+
+    @classmethod
+    def check_bundle_compatibility(cls, req_a: Dict[str, Any], req_b: Dict[str, Any], asset_a=None, asset_b=None) -> Dict[str, Any]:
+        return SafetyGuardrailService.check_bundle_compatibility(req_a, req_b, asset_a=asset_a, asset_b=asset_b)
+
+    @classmethod
+    def validate_optimized_plan(cls, blocks, all_requests, train_schedules, assets=None) -> Dict[str, Any]:
+        return SafetyGuardrailService.validate_optimized_plan(blocks, all_requests, train_schedules, assets=assets)

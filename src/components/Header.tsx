@@ -21,7 +21,7 @@ import {
 import { motion, AnimatePresence } from "motion/react";
 import { Language, translations } from "../lib/translations";
 
-export type NavTab = "network" | "corridors" | "schedules" | "assets" | "analytics";
+export type NavTab = "network" | "corridors" | "prioritization" | "schedules" | "assets" | "analytics";
 
 interface HeaderProps {
   activeTab: NavTab;
@@ -35,6 +35,7 @@ interface HeaderProps {
   onProfileClick?: () => void;
   onOpenAdvisoryModal?: () => void;
   onDataPipelineClick?: () => void;
+  onSafetyGuardrailClick?: () => void;
   unreadAlertsCount?: number;
   opacityLevel?: number;
   setOpacityLevel?: (val: number) => void;
@@ -56,6 +57,7 @@ export const Header: React.FC<HeaderProps> = ({
   onProfileClick,
   onOpenAdvisoryModal,
   onDataPipelineClick,
+  onSafetyGuardrailClick,
   unreadAlertsCount = 0
 }) => {
   const [fontSize, setFontSize] = useState<"sm" | "base" | "lg">("base");
@@ -64,6 +66,7 @@ export const Header: React.FC<HeaderProps> = ({
   const navItems: { id: NavTab; label: string; code: string }[] = [
     { id: "network", label: t.navNetwork, code: "SYS-01" },
     { id: "corridors", label: t.navCorridors, code: "SEC-07" },
+    { id: "prioritization", label: t.navPrioritization || "AI Prioritization", code: "PRI-02" },
     { id: "schedules", label: t.navSchedules, code: "COA-4" },
     { id: "assets", label: t.navAssets, code: "TMS-8" },
     { id: "analytics", label: t.navAnalytics, code: "ANL-09" },
@@ -213,6 +216,18 @@ export const Header: React.FC<HeaderProps> = ({
                 className="w-full bg-slate-50 border border-slate-300 rounded-md pl-8 pr-3 py-1 text-xs text-slate-900 placeholder-slate-400 focus:outline-none focus:border-blue-800 focus:ring-1 focus:ring-blue-800 font-sans shadow-inner"
               />
             </div>
+          )}
+
+          {/* Safety Guardrail Engine Button */}
+          {onSafetyGuardrailClick && (
+            <button
+              onClick={onSafetyGuardrailClick}
+              className="text-emerald-950 bg-emerald-100 hover:bg-emerald-200 border border-emerald-400 font-bold px-2.5 py-1.5 rounded-md text-xs font-mono flex items-center space-x-1.5 transition cursor-pointer shadow-xs"
+              title="Open Railway Safety Constraints & Guardrail Engine"
+            >
+              <Shield className="w-3.5 h-3.5 text-emerald-800" />
+              <span className="hidden sm:inline">SAFETY ENGINE</span>
+            </button>
           )}
 
           {/* Dataset Pipeline Button */}

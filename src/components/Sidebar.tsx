@@ -9,6 +9,7 @@ import {
   Train, 
   Activity,
   Cpu,
+  Shield,
   X,
   User
 } from "lucide-react";
@@ -26,7 +27,9 @@ interface SidebarProps {
   onOpenMaintenance?: () => void;
   onOpenProfile?: () => void;
   onOpenAnalytics?: () => void;
+  onOpenPrioritization?: () => void;
   onOpenDataPipeline?: () => void;
+  onOpenSafetyGuardrail?: () => void;
   activeTab?: string;
   showEmergencyTop?: boolean;
   isOpenMobile?: boolean;
@@ -42,7 +45,9 @@ export const Sidebar: React.FC<SidebarProps> = ({
   onOpenMaintenance,
   onOpenProfile,
   onOpenAnalytics,
+  onOpenPrioritization,
   onOpenDataPipeline,
+  onOpenSafetyGuardrail,
   activeTab,
   showEmergencyTop = false,
   isOpenMobile = false,
@@ -184,6 +189,44 @@ export const Sidebar: React.FC<SidebarProps> = ({
 
         {/* Bottom links & Emergency button */}
         <div className="space-y-1 pt-3 border-t border-slate-800">
+          <motion.button
+            onClick={() => {
+              if (onOpenSafetyGuardrail) onOpenSafetyGuardrail();
+              if (onCloseMobile) onCloseMobile();
+            }}
+            whileHover={{ x: 2 }}
+            className="w-full flex items-center justify-between px-3 py-2 rounded-md text-xs font-bold text-emerald-400 bg-slate-950 border border-emerald-500/40 hover:border-emerald-400 hover:bg-slate-900 transition cursor-pointer"
+          >
+            <div className="flex items-center space-x-2.5">
+              <Shield className="w-4 h-4 text-emerald-400" />
+              <span>Safety Engine (Step 4)</span>
+            </div>
+            <span className="text-[9px] px-1.5 py-0.2 rounded font-mono bg-emerald-950 text-emerald-300 border border-emerald-700">
+              GUARDRAILS
+            </span>
+          </motion.button>
+
+          <motion.button
+            onClick={() => {
+              if (onOpenPrioritization) onOpenPrioritization();
+              if (onCloseMobile) onCloseMobile();
+            }}
+            whileHover={{ x: 2 }}
+            className={`w-full flex items-center justify-between px-3 py-2 rounded-md text-xs font-bold transition cursor-pointer ${
+              activeTab === "prioritization"
+                ? "bg-amber-500 text-slate-950 shadow-xs border border-amber-400 font-black"
+                : "text-amber-400 bg-slate-950 border border-amber-500/40 hover:border-amber-400 hover:bg-slate-900"
+            }`}
+          >
+            <div className="flex items-center space-x-2.5">
+              <Cpu className="w-4 h-4 text-amber-400" />
+              <span>Prioritization (Step 3)</span>
+            </div>
+            <span className="text-[9px] px-1.5 py-0.2 rounded font-mono bg-amber-950 text-amber-300 border border-amber-700">
+              AI ENGINE
+            </span>
+          </motion.button>
+
           <motion.button
             onClick={() => {
               if (onOpenDataPipeline) onOpenDataPipeline();

@@ -18,12 +18,19 @@ from backend.adapters import (
 from backend.ai_engine import AIRailSyncPrioritizationEngine
 from backend.optimizer import CPOrToolsBlockOptimizer
 from backend.pipeline.service import PipelineImportService
+from backend.services.prioritization_service import PrioritizationService
+from backend.services.prioritization_scenarios import PrioritizationScenarioRunner
+from backend.api.routers.prioritization import router as prioritization_router
+from backend.api.routers.safety import router as safety_router
 
 app = FastAPI(
     title="RailSync Authoritative Backend",
     description="Unified Multi-Department Ingestion, CP-SAT Optimization, and Corridor Planning for Indian Railways",
     version="2.0.0"
 )
+
+app.include_router(prioritization_router, prefix="/api/v1")
+app.include_router(safety_router, prefix="/api/v1")
 
 # CORS Middleware setup
 app.add_middleware(

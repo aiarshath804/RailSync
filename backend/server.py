@@ -6,6 +6,12 @@ Supports REST JSON endpoints, multi-part dataset uploads, SSE telemetry, and COR
 
 import os
 import sys
+
+# Ensure workspace root is in sys.path for backend.* imports
+ROOT_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+if ROOT_DIR not in sys.path:
+    sys.path.insert(0, ROOT_DIR)
+
 import json
 import re
 import io
@@ -20,6 +26,12 @@ from backend.repository import RailSyncRepository
 from backend.ai_engine import AIRailSyncPrioritizationEngine
 from backend.optimizer import CPOrToolsBlockOptimizer
 from backend.pipeline.service import PipelineImportService
+from backend.services.prioritization_service import PrioritizationService
+from backend.services.prioritization_scenarios import PrioritizationScenarioRunner
+from backend.core.safety_config import SafetyConfig
+from backend.services.safety_guardrail_service import SafetyGuardrailService
+from backend.services.safety_scenarios import SafetyScenarioRunner
+from backend.services.optimization_service import OptimizationService
 
 # Initialize database and singletons
 init_db()
@@ -135,6 +147,127 @@ class RailSyncAPIHandler(BaseHTTPRequestHandler):
             self.wfile.write(json.dumps({"batch": batch}).encode("utf-8"))
             return
 
+        # Prioritization Engine Configuration Summary
+        if path == "/api/v1/prioritization/config":
+            config_summary = PrioritizationService.get_configuration_summary()
+            self._set_headers(200)
+            self.wfile.write(json.dumps(config_summary).encode("utf-8"))
+            return
+
+        # Prioritization Demonstration Scenarios
+        if path == "/api/v1/prioritization/scenarios":
+            scenarios = PrioritizationScenarioRunner.run_all_scenarios()
+            self._set_headers(200)
+            self.wfile.write(json.dumps(scenarios).encode("utf-8"))
+            return
+
+        # Safety Guardrail Config
+        if path == "/api/v1/safety/config":
+            summary = SafetyConfig.get_summary()
+            self._set_headers(200)
+            self.wfile.write(json.dumps(summary).encode("utf-8"))
+            return
+
+        # Safety Guardrail Demonstration Scenarios (7 core safety tests)
+        if path == "/api/v1/safety/scenarios":
+            scenarios = SafetyScenarioRunner.run_all_scenarios()
+            self._set_headers(200)
+            self.wfile.write(json.dumps(scenarios).encode("utf-8"))
+            return
+
+        # Safety Audit Logs
+        if path == "/api/v1/safety/audit-logs":
+            limit = int(query.get("limit", [50])[0])
+            logs = repo.get_safety_audit_logs(limit=limit)
+            self._set_headers(200)
+            self.wfile.write(json.dumps({
+                "status": "SUCCESS",
+                "total_logs": len(logs),
+                "audit_logs": logs
+            }).encode("utf-8"))
+            return
+
+        # Safety Evaluated Requests (with classification, deadlines, isolations)
+        if path == "/api/v1/safety/evaluated-requests":
+            requests = repo.get_all_requests()
+            trains = repo.get_all_trains()
+            evaluated = SafetyGuardrailService.evaluate_batch_safety(
+                requests, train_schedules=trains
+            )
+            self._set_headers(200)
+            self.wfile.write(json.dumps({
+                "status": "SUCCESS",
+                "total_requests": len(evaluated),
+                "requests": evaluated,
+                "disclaimer": SafetyConfig.PROTOTYPE_DISCLAIMER
+            }).encode("utf-8"))
+            return
+
+        # Prioritization Evaluated Requests
+        if path == "/api/v1/prioritization/requests":
+            priority_filter = query.get("priority_level", [None])[0]
+            dept_filter = query.get("department_code", [None])[0]
+            corridor_filter = query.get("corridor_id", [None])[0]
+            safety_override_filter = query.get("safety_override_only", [None])[0]
+
+            requests = repo.get_all_requests()
+            trains = repo.get_all_trains()
+            evaluated = []
+
+            for r in requests:
+                if priority_filter and r.get("priority_level", "").upper() != priority_filter.upper():
+                    continue
+                if dept_filter and r.get("source_system", "").upper() != dept_filter.upper():
+                    continue
+                if corridor_filter and r.get("corridor_id", "").upper() != corridor_filter.upper():
+                    continue
+                if safety_override_filter is not None:
+                    is_ov = bool(r.get("safety_override", False))
+                    req_ov = safety_override_filter.lower() in ["true", "1"]
+                    if is_ov != req_ov:
+                        continue
+
+                r_copy = dict(r)
+                # Compute explanation on the fly if needed
+                eval_res = PrioritizationService.evaluate_request(r_copy, train_schedules=trains, all_requests=requests)
+                r_copy["criticality_score"] = r_copy.get("criticality_score") or eval_res["criticality_score"]
+                r_copy["urgency_score"] = r_copy.get("urgency_score") or eval_res["urgency_score"]
+                r_copy["impact_score"] = r_copy.get("impact_score") or eval_res["impact_score"]
+                r_copy["priority_score"] = r_copy.get("priority_score") or eval_res["priority_score"]
+                r_copy["priority_level"] = r_copy.get("priority_level") or eval_res["priority_level"]
+                r_copy["safety_override"] = bool(r_copy.get("safety_override") or eval_res["safety_override"])
+                r_copy["override_reason"] = r_copy.get("override_reason") or eval_res["override_reason"]
+                r_copy["explanation"] = eval_res["explanation"]
+                evaluated.append(r_copy)
+
+            evaluated.sort(
+                key=lambda x: (
+                    1 if x.get("safety_override") else 0,
+                    float(x.get("priority_score") or (float(x.get("urgency_level", 0.5)) * 100.0))
+                ),
+                reverse=True
+            )
+
+            tier_counts = {"CRITICAL": 0, "HIGH": 0, "MEDIUM": 0, "LOW": 0}
+            safety_count = 0
+            for item in evaluated:
+                lvl = item.get("priority_level", "MEDIUM").upper()
+                if lvl in tier_counts:
+                    tier_counts[lvl] += 1
+                if item.get("safety_override"):
+                    safety_count += 1
+
+            res = {
+                "status": "SUCCESS",
+                "total_requests": len(evaluated),
+                "tier_summary": tier_counts,
+                "safety_overrides_count": safety_count,
+                "requests": evaluated
+            }
+            self._set_headers(200)
+            self.wfile.write(json.dumps(res).encode("utf-8"))
+            return
+
         # Dashboard Metrics
         if path == "/api/v1/dashboard/metrics":
             requests = repo.get_all_requests()
@@ -150,7 +283,8 @@ class RailSyncAPIHandler(BaseHTTPRequestHandler):
                 "pending_requests_count": sum(1 for r in requests if r["status"] == "PENDING"),
                 "bundled_requests_count": sum(1 for r in requests if r["status"] == "BUNDLED"),
                 "approved_blocks_count": sum(1 for b in blocks if b.get("controller_approval_status") == "APPROVED"),
-                "critical_defects_count": sum(1 for r in requests if r.get("defect_severity", 1) >= 4)
+                "critical_defects_count": sum(1 for r in requests if r.get("defect_severity", 1) >= 4 or r.get("priority_level") == "CRITICAL"),
+                "safety_overrides_count": sum(1 for r in requests if r.get("safety_override"))
             }
             self._set_headers(200)
             self.wfile.write(json.dumps(res).encode("utf-8"))
@@ -255,7 +389,79 @@ class RailSyncAPIHandler(BaseHTTPRequestHandler):
             except Exception:
                 json_body = {}
 
-        # 2. Single item ingestions
+        # 2. Prioritization Engine POST Endpoints
+        if path == "/api/v1/prioritization/evaluate":
+            trains = repo.get_all_trains()
+            all_reqs = repo.get_all_requests()
+            if "requests" in json_body and isinstance(json_body["requests"], list):
+                results = PrioritizationService.evaluate_batch(
+                    json_body["requests"],
+                    train_schedules=trains,
+                    all_requests=all_reqs
+                )
+                self._set_headers(200)
+                self.wfile.write(json.dumps({
+                    "status": "SUCCESS",
+                    "evaluated_count": len(results),
+                    "results": results
+                }).encode("utf-8"))
+                return
+            else:
+                req_data = json_body.get("request", json_body)
+                result = PrioritizationService.evaluate_request(
+                    req_data,
+                    train_schedules=trains,
+                    all_requests=all_reqs
+                )
+                self._set_headers(200)
+                self.wfile.write(json.dumps({
+                    "status": "SUCCESS",
+                    "evaluation": result
+                }).encode("utf-8"))
+                return
+
+        if path == "/api/v1/prioritization/recalculate":
+            requests = repo.get_all_requests()
+            trains = repo.get_all_trains()
+            if not requests:
+                self._set_headers(200)
+                self.wfile.write(json.dumps({
+                    "status": "EMPTY",
+                    "updated_count": 0,
+                    "message": "No maintenance requests available to recalculate."
+                }).encode("utf-8"))
+                return
+
+            evaluated = PrioritizationService.evaluate_batch(requests, train_schedules=trains)
+            updated_count = 0
+            for item in evaluated:
+                req_id = item.get("id") or item.get("request_id")
+                if req_id is not None:
+                    # Update in SQLite
+                    repo.update_request_prioritization(
+                        request_id=req_id,
+                        criticality_score=item["criticality_score"],
+                        urgency_score=item["urgency_score"],
+                        impact_score=item["impact_score"],
+                        priority_score=item["priority_score"],
+                        priority_level=item["priority_level"],
+                        safety_override=item["safety_override"],
+                        override_reason=item["override_reason"],
+                        scoring_method=item["model_used"],
+                        metadata={"explanation": item["explanation"]}
+                    )
+                    updated_count += 1
+
+            self._set_headers(200)
+            self.wfile.write(json.dumps({
+                "status": "SUCCESS",
+                "total_requests": len(requests),
+                "updated_count": updated_count,
+                "evaluations": evaluated
+            }).encode("utf-8"))
+            return
+
+        # 3. Single item ingestions
         if path == "/api/v1/ingest/tms":
             try:
                 res = import_service.ingest_single_tms(json_body)
@@ -296,7 +502,7 @@ class RailSyncAPIHandler(BaseHTTPRequestHandler):
                 self.wfile.write(json.dumps({"error": str(e)}).encode("utf-8"))
             return
 
-        # 3. Generate Optimized Plan
+        # 3. Generate Optimized Plan (with Safety Guardrails)
         if path == "/api/v1/optimize/generate-plan":
             requests = repo.get_all_requests()
             trains = repo.get_all_trains()
@@ -311,55 +517,131 @@ class RailSyncAPIHandler(BaseHTTPRequestHandler):
                 }).encode("utf-8"))
                 return
 
-            optimizer = CPOrToolsBlockOptimizer(requests, trains, assets=assets)
-            blocks = optimizer.solve()
+            solve_result = OptimizationService.optimize_schedule(requests, trains, assets=assets)
+            if solve_result.get("status") == "NO_SAFE_PLAN" or not solve_result.get("success", True):
+                self._set_headers(200)
+                self.wfile.write(json.dumps(solve_result).encode("utf-8"))
+                return
+
+            blocks = solve_result.get("optimized_blocks", [])
             repo.save_optimized_blocks(blocks)
-            res = {
-                "status": "OPTIMAL_SCHEDULE_GENERATED",
-                "saved_block_hours": round(sum(b.get("saved_block_hours", 0.0) for b in blocks), 2),
-                "total_blocks_created": len(blocks),
-                "optimized_blocks": blocks
-            }
             self._set_headers(200)
-            self.wfile.write(json.dumps(res).encode("utf-8"))
+            self.wfile.write(json.dumps(solve_result).encode("utf-8"))
             return
 
-        # 4. Emergency Replan
+        # 4. Safety Guardrail Evaluation
+        if path == "/api/v1/safety/evaluate":
+            trains = repo.get_all_trains()
+            all_reqs = repo.get_all_requests()
+            if isinstance(json_body, list):
+                eval_res = SafetyGuardrailService.evaluate_batch_safety(
+                    json_body, all_requests=all_reqs, train_schedules=trains
+                )
+            else:
+                eval_res = SafetyGuardrailService.evaluate_request_safety(
+                    json_body, all_requests=all_reqs, train_schedules=trains
+                )
+            self._set_headers(200)
+            self.wfile.write(json.dumps({"status": "SUCCESS", "evaluation": eval_res}).encode("utf-8"))
+            return
+
+        # 5. Safety Guardrail Bundle Compatibility Check
+        if path == "/api/v1/safety/check-compatibility":
+            req_a = json_body.get("request_a", {})
+            req_b = json_body.get("request_b", {})
+            asset_a = json_body.get("asset_a")
+            asset_b = json_body.get("asset_b")
+            compat = SafetyGuardrailService.check_bundle_compatibility(
+                req_a, req_b, asset_a=asset_a, asset_b=asset_b
+            )
+            self._set_headers(200)
+            self.wfile.write(json.dumps({"status": "SUCCESS", "compatibility": compat}).encode("utf-8"))
+            return
+
+        # 6. Safety Guardrail Plan Validator
+        if path == "/api/v1/safety/validate-plan":
+            blocks = json_body.get("blocks", repo.get_all_blocks())
+            requests = json_body.get("requests", repo.get_all_requests())
+            trains = json_body.get("train_schedules", repo.get_all_trains())
+            assets = repo.get_all_assets()
+            val_report = SafetyGuardrailService.validate_optimized_plan(
+                blocks, requests, trains, assets=assets
+            )
+            self._set_headers(200)
+            self.wfile.write(json.dumps({"status": "SUCCESS", "validation_report": val_report}).encode("utf-8"))
+            return
+
+        # 7. Safety Manual Controller Override
+        if path == "/api/v1/safety/manual-override":
+            controller_id = json_body.get("controller_id", "CHIEF_CONTROLLER_01")
+            target_type = json_body.get("target_type", "BLOCK")
+            target_id = str(json_body.get("target_id", "1"))
+            original_status = json_body.get("original_status", "PENDING")
+            override_action = json_body.get("override_action", "APPROVE_DESPITE_WARNING")
+            override_reason = json_body.get("override_reason", "Authorized by Section Safety Controller")
+            risk_assessment = json_body.get("risk_assessment", "Speed restriction 30km/h imposed during adjacent window")
+
+            log_id = repo.save_safety_audit_log(
+                controller_id=controller_id,
+                target_type=target_type,
+                target_id=target_id,
+                original_status=original_status,
+                override_action=override_action,
+                override_reason=override_reason,
+                risk_assessment=risk_assessment,
+                ip_address=self.client_address[0] if hasattr(self, "client_address") else "127.0.0.1",
+                signature=f"DIGITAL_SIG_{controller_id}_{datetime.datetime.now().strftime('%Y%m%d%H%M%S')}"
+            )
+
+            # If target was a block, update block status
+            if target_type == "BLOCK":
+                repo.update_block_approval(int(target_id), approve=True)
+
+            self._set_headers(200)
+            self.wfile.write(json.dumps({
+                "status": "OVERRIDE_RECORDED",
+                "audit_log_id": log_id,
+                "message": f"Manual controller override successfully recorded for {target_type} #{target_id}."
+            }).encode("utf-8"))
+            return
+
+        # 8. Emergency Replan with Guardrails
         if path == "/api/v1/optimize/emergency-replan":
             asset_id = json_body.get("asset_id", "TRK-01")
             duration = int(json_body.get("duration_minutes", 60))
-            notes = json_body.get("notes", "Urgent track fracture")
-            
-            emergency_dict = {
-                "track_code": asset_id,
-                "defect_id": f"EMG-{datetime.datetime.now().strftime('%H%M%S')}",
-                "severity_rank": 5,
-                "reported_at": datetime.datetime.now().isoformat(),
-                "required_repair_duration": max(30, duration),
-                "proposed_date": datetime.datetime.now().isoformat(),
-                "inspector_notes": f"EMERGENCY REPAIR: {notes}",
-                "corridor_id": "NDLS-HWH-01",
-                "work_type": "EMERGENCY_REPAIR"
-            }
-            import_service.import_dataset("TMS", [emergency_dict], filename="emergency_trigger.json")
+            defect_type = json_body.get("defect_type", "RAIL_FRACTURE")
+            corridor_id = json_body.get("corridor_id", "NDLS-HWH-01")
 
+            emergency_req = {
+                "id": 9999,
+                "department_code": json_body.get("department_code", "TMS"),
+                "source_system": json_body.get("department_code", "TMS"),
+                "asset_id": asset_id,
+                "defect_type": defect_type,
+                "work_type": "EMERGENCY_REPAIR",
+                "defect_severity": 5,
+                "requested_start_time": datetime.datetime.now().isoformat(),
+                "duration_minutes": duration,
+                "corridor_id": corridor_id
+            }
+
+            blocks = repo.get_all_blocks()
             requests = repo.get_all_requests()
             trains = repo.get_all_trains()
             assets = repo.get_all_assets()
-            optimizer = CPOrToolsBlockOptimizer(requests, trains, assets=assets)
-            blocks = optimizer.solve()
-            repo.save_optimized_blocks(blocks)
 
-            res = {
-                "status": "EMERGENCY_REPLAN_COMPLETED",
-                "emergency_asset": asset_id,
-                "optimized_blocks": blocks
-            }
+            preempt_res = SafetyGuardrailService.preempt_and_replan_emergency(
+                emergency_req, blocks, requests, trains, assets=assets
+            )
+
+            if preempt_res.get("success"):
+                repo.save_optimized_blocks(preempt_res["revised_blocks"])
+
             self._set_headers(200)
-            self.wfile.write(json.dumps(res).encode("utf-8"))
+            self.wfile.write(json.dumps(preempt_res).encode("utf-8"))
             return
 
-        # 5. Approve Block
+        # 9. Approve Block
         if path == "/api/v1/optimize/approve-block":
             block_id = int(json_body.get("block_id", 0))
             approve = bool(json_body.get("approve", True))
