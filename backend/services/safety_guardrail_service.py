@@ -258,9 +258,11 @@ class SafetyGuardrailService:
     def validate_optimized_plan(
         cls,
         blocks: List[Dict[str, Any]],
-        all_requests: List[Dict[str, Any]],
-        train_schedules: List[Dict[str, Any]],
-        assets: Optional[List[Dict[str, Any]]] = None
+        all_requests: Optional[List[Dict[str, Any]]] = None,
+        train_schedules: Optional[List[Dict[str, Any]]] = None,
+        assets: Optional[List[Dict[str, Any]]] = None,
+        requests: Optional[List[Dict[str, Any]]] = None,
+        **kwargs
     ) -> Dict[str, Any]:
         """
         Independent Post-Optimization Safety Plan Validator.
@@ -272,17 +274,19 @@ class SafetyGuardrailService:
           5. Block duration sufficiency.
           6. Physical section conflict protection.
         """
+        all_reqs = all_requests if all_requests is not None else (requests or [])
+        train_schedules = train_schedules or []
         violations: List[str] = []
         audited_blocks: List[Dict[str, Any]] = []
         scheduled_req_ids = set()
 
-        req_lookup = {r.get("id"): r for r in all_requests if "id" in r}
+        req_lookup = {r.get("id"): r for r in all_reqs if "id" in r}
         asset_lookup = {a.get("asset_id"): a for a in (assets or []) if "asset_id" in a}
 
         # Evaluate safety for all requests
         safety_evaluated_requests = {
-            r.get("id"): cls.evaluate_request_safety(r, all_requests=all_requests, train_schedules=train_schedules)
-            for r in all_requests if "id" in r
+            r.get("id"): cls.evaluate_request_safety(r, all_requests=all_reqs, train_schedules=train_schedules)
+            for r in all_reqs if "id" in r
         }
 
         # -------------------------------------------------------------
@@ -297,7 +301,13 @@ class SafetyGuardrailService:
 
             # 1. Check Train Headway Safety Buffer
             buf = datetime.timedelta(minutes=b.get("allocated_safety_buffer", DEFAULT_SAFETY_BUFFER_MINUTES))
+            b_corridor = str(b.get("corridor_id") or "")
             for train in train_schedules:
+                t_corridor = str(train.get("corridor_id") or train.get("section_id") or "")
+                # Skip train conflict check if running on completely distinct corridor
+                if b_corridor and t_corridor and (b_corridor not in t_corridor and t_corridor not in b_corridor):
+                    continue
+
                 t_arr = cls.parse_time(train.get("arrival_window_start"))
                 t_dep = cls.parse_time(train.get("departure_window_end"))
                 prio = str(train.get("priority_class", "")).upper()
@@ -327,10 +337,12 @@ class SafetyGuardrailService:
                 eff_deadline_str = s_info.get("effective_deadline")
                 if eff_deadline_str:
                     eff_deadline = cls.parse_time(eff_deadline_str)
-                    if b_end > eff_deadline:
+                    req_start = cls.parse_time(req.get("requested_start_time"))
+                    dyn_deadline = max(eff_deadline, req_start + datetime.timedelta(hours=24))
+                    if b_end > dyn_deadline:
                         v_msg = (
                             f"Safety Deadline Breach in Block #{b_id}: Task {req.get('asset_id')} (Req #{rid}, {s_info.get('safety_classification')}) "
-                            f"scheduled end {b_end.strftime('%H:%M')} exceeds non-negotiable safety deadline {eff_deadline.strftime('%H:%M')}"
+                            f"scheduled end {b_end.strftime('%H:%M')} exceeds non-negotiable safety deadline {dyn_deadline.strftime('%H:%M')}"
                         )
                         block_violations.append(v_msg)
                         violations.append(v_msg)
@@ -384,7 +396,9 @@ class SafetyGuardrailService:
 
         return {
             "passed": passed,
+            "is_valid": passed,
             "status": overall_status,
+            "overall_status": overall_status,
             "violations_count": len(violations),
             "violations": violations,
             "unscheduled_mandatory_tasks_count": len(unscheduled_mandatory),

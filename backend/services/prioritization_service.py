@@ -17,9 +17,11 @@ from typing import Dict, Any, List, Optional, Tuple
 
 from backend.core.prioritization_config import PrioritizationConfig
 from backend.ai_engine import AIRailSyncPrioritizationEngine
+from backend.ml.inference import MLInferenceEngine
 
-# Singleton instance of optional ML model
+# Singleton instance of optional ML model and trained inference engine
 _ml_engine = AIRailSyncPrioritizationEngine()
+_real_ml_engine = MLInferenceEngine.get_instance()
 
 
 class CriticalityEngine:
@@ -305,25 +307,20 @@ class PrioritizationService:
             request, train_schedules=train_schedules
         )
 
-        # 4. Optional ML Hybrid Integration
-        model_used = "deterministic_hybrid"
-        ml_confidence = None
-        if use_ml_model:
-            try:
-                ml_prob = _ml_engine.compute_criticality(
-                    defect_severity=int(request.get("defect_severity", 3)),
-                    asset_age=12.5,
-                    weather_risk=0.3,
-                    historical_delay=15.0,
-                    inspection_freq=90
-                )
-                # Blend 10% ML risk into criticality
-                crit_score = round(crit_score * 0.90 + (ml_prob * 100.0) * 0.10, 1)
-                crit_factors.append(f"RandomForest ML Risk Indicator (Demo Trained): Probability {ml_prob:.2f}")
-                model_used = "random_forest_hybrid"
-                ml_confidence = round(ml_prob, 3)
-            except Exception:
-                model_used = "deterministic_hybrid"
+        # 4. Real ML Failure Risk Inference & Explainability
+        ml_risk = _real_ml_engine.predict_risk(request)
+        model_used = ml_risk.get("model_version", "RailSync-RF-v1.2.0")
+        ml_confidence = ml_risk.get("model_confidence", 0.75)
+
+        # Blend ML Failure Risk Signal (+-12 pts adjustment based on ML probability vs neutral 0.40 baseline)
+        ml_risk_prob = float(ml_risk.get("failure_risk_probability", 0.50))
+        ml_adj = round((ml_risk_prob - 0.40) * 24.0, 1)
+        if abs(ml_adj) >= 1.0:
+            crit_score = max(5.0, min(100.0, crit_score + ml_adj))
+            direction_str = "increased" if ml_adj > 0 else "reduced"
+            crit_factors.append(
+                f"ML Failure Risk ({ml_risk.get('predicted_risk_level')}, {ml_risk_prob*100:.0f}% prob, {int(ml_confidence*100)}% conf): {direction_str} criticality by {abs(ml_adj):.1f} pts"
+            )
 
         # 5. Weighted Final Priority Score
         w_c = PrioritizationConfig.WEIGHT_CRITICALITY
@@ -369,6 +366,7 @@ class PrioritizationService:
             "override_reason": override_reason,
             "model_used": model_used,
             "confidence": ml_confidence,
+            "ml_risk_assessment": ml_risk,
             "explanation": {
                 "criticality": {
                     "score": crit_score,
@@ -385,6 +383,15 @@ class PrioritizationService:
                     "score": imp_score,
                     "weight": f"{int(w_i * 100)}%",
                     "factors": imp_factors
+                },
+                "ml_intelligence": {
+                    "model_version": model_used,
+                    "predicted_risk_level": ml_risk.get("predicted_risk_level"),
+                    "failure_risk_probability": ml_risk.get("failure_risk_probability"),
+                    "model_confidence": ml_risk.get("model_confidence"),
+                    "is_low_confidence": ml_risk.get("is_low_confidence"),
+                    "top_drivers": ml_risk.get("top_feature_contributions", []),
+                    "explanation_text": ml_risk.get("explanation")
                 },
                 "final_priority": {
                     "score": final_score,
@@ -428,6 +435,7 @@ class PrioritizationService:
             item["safety_override"] = eval_res["safety_override"]
             item["override_reason"] = eval_res["override_reason"]
             item["model_used"] = eval_res["model_used"]
+            item["ml_risk_assessment"] = eval_res.get("ml_risk_assessment")
             item["explanation"] = eval_res["explanation"]
             item["scored_at"] = eval_res["scored_at"]
             evaluated_requests.append(item)

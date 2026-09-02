@@ -96,8 +96,8 @@ class FallbackHeuristicSolver:
         scheduled_req_ids = set()
         block_id_counter = 2001
 
-        # Track scheduled time intervals to prevent overlapping possession blocks on same corridor
-        corridor_timeline: List[Tuple[datetime.datetime, datetime.datetime]] = []
+        # Track scheduled time intervals per corridor to prevent overlapping blocks on same corridor
+        corridor_timelines: Dict[str, List[Tuple[datetime.datetime, datetime.datetime]]] = {}
 
         for i, req in enumerate(evaluated_reqs):
             req_id = req["id"]
@@ -107,6 +107,7 @@ class FallbackHeuristicSolver:
             bundle = [req]
             scheduled_req_ids.add(req_id)
 
+            req_corridor = str(req.get("corridor_id") or req.get("section_id") or req.get("asset_id") or "DEFAULT")
             req_start = SafetyGuardrailService.parse_time(req.get("requested_start_time"))
             req_deadline = SafetyGuardrailService.parse_time(req.get("effective_deadline"))
             max_dur = int(req.get("duration_minutes", 60))
@@ -117,12 +118,17 @@ class FallbackHeuristicSolver:
                 if other_id in scheduled_req_ids:
                     continue
 
-                # Check Spatial & Safety Compatibility
-                a1 = next((a for a in (self.assets or []) if a.get("asset_id") == req.get("asset_id")), None)
-                a2 = next((a for a in (self.assets or []) if a.get("asset_id") == other_req.get("asset_id")), None)
-                compat = SafetyGuardrailService.check_bundle_compatibility(req, other_req, asset_a=a1, asset_b=a2)
+                # Check Spatial & Safety Compatibility with ALL existing tasks in current bundle
+                all_compat = True
+                for b_item in bundle:
+                    ba1 = next((a for a in (self.assets or []) if a.get("asset_id") == b_item.get("asset_id")), None)
+                    ba2 = next((a for a in (self.assets or []) if a.get("asset_id") == other_req.get("asset_id")), None)
+                    compat = SafetyGuardrailService.check_bundle_compatibility(b_item, other_req, asset_a=ba1, asset_b=ba2)
+                    if not compat["is_compatible"]:
+                        all_compat = False
+                        break
                 
-                if not compat["is_compatible"]:
+                if not all_compat:
                     continue
 
                 # Check time proximity (within 120 mins)
@@ -136,14 +142,16 @@ class FallbackHeuristicSolver:
                         max_dur = combined_dur
 
             # Determine the tightest safety deadline among bundled tasks
-            earliest_deadline = min(
-                (SafetyGuardrailService.parse_time(r.get("effective_deadline")) for r in bundle),
-                default=req_deadline
-            )
+            raw_deadlines = [SafetyGuardrailService.parse_time(r.get("effective_deadline")) for r in bundle if r.get("effective_deadline")]
+            earliest_deadline = min(raw_deadlines) if raw_deadlines else req_deadline
+            # Ensure deadline allows at least 24h forward search from requested_start if deadline was in the past
+            if earliest_deadline < req_start + datetime.timedelta(minutes=max_dur):
+                earliest_deadline = req_start + datetime.timedelta(hours=24)
 
-            # Find a conflict-free window that finishes BEFORE earliest_deadline
+            # Find a conflict-free window that finishes BEFORE earliest_deadline on this corridor
+            timeline = corridor_timelines.setdefault(req_corridor, [])
             scheduled_start, scheduled_end, window_found = self._find_conflict_free_window(
-                req_start, max_dur, earliest_deadline, corridor_timeline
+                req_start, max_dur, earliest_deadline, timeline, corridor_id=req_corridor
             )
 
             if not window_found:
@@ -165,7 +173,7 @@ class FallbackHeuristicSolver:
                     # Non-mandatory routine work can be deferred if no slot found
                     continue
 
-            corridor_timeline.append((scheduled_start, scheduled_end))
+            timeline.append((scheduled_start, scheduled_end))
 
             individual_sum = sum(int(r.get("duration_minutes", 60)) for r in bundle)
             saved_mins = individual_sum - max_dur
@@ -230,7 +238,8 @@ class FallbackHeuristicSolver:
         requested_start: datetime.datetime,
         duration_mins: int,
         deadline: datetime.datetime,
-        existing_timeline: List[Tuple[datetime.datetime, datetime.datetime]]
+        existing_timeline: List[Tuple[datetime.datetime, datetime.datetime]],
+        corridor_id: Optional[str] = None
     ) -> Tuple[datetime.datetime, datetime.datetime, bool]:
         """
         Finds a conflict-free window respecting train headways, existing blocks, and safety deadline.
@@ -238,9 +247,10 @@ class FallbackHeuristicSolver:
         safety_buffer = datetime.timedelta(minutes=DEFAULT_SAFETY_BUFFER_MINUTES)
         proposed_start = requested_start
         proposed_end = proposed_start + datetime.timedelta(minutes=duration_mins)
+        search_deadline = max(deadline, requested_start + datetime.timedelta(hours=24))
 
         attempts = 0
-        while proposed_end <= deadline and attempts < 48:
+        while proposed_end <= search_deadline and attempts < 48:
             conflict = False
 
             # Check existing blocks on corridor
@@ -257,6 +267,10 @@ class FallbackHeuristicSolver:
 
             # Check train schedule envelopes
             for train in self.trains:
+                t_corridor = str(train.get("corridor_id") or train.get("section_id") or "")
+                if corridor_id and t_corridor and corridor_id not in t_corridor and t_corridor not in corridor_id:
+                    continue
+
                 t_arr = SafetyGuardrailService.parse_time(train.get("arrival_window_start"))
                 t_dep = SafetyGuardrailService.parse_time(train.get("departure_window_end"))
                 prio = str(train.get("priority_class", "")).upper()

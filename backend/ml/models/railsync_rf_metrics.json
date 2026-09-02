@@ -1,0 +1,155 @@
+{
+  "model_version": "RailSync-RF-v1.2.0",
+  "evaluated_at": "2026-09-02T11:31:11.045821",
+  "evaluation_metrics": {
+    "total_test_samples": 240,
+    "accuracy": 0.6875,
+    "macro_precision": 0.587,
+    "macro_recall": 0.4682,
+    "macro_f1": 0.4791,
+    "weighted_precision": 0.6865,
+    "weighted_recall": 0.6875,
+    "weighted_f1": 0.6502,
+    "brier_score": 0.1123,
+    "class_labels": [
+      "LOW",
+      "MEDIUM",
+      "HIGH",
+      "CRITICAL"
+    ],
+    "confusion_matrix": [
+      [
+        0,
+        13,
+        0,
+        0
+      ],
+      [
+        0,
+        47,
+        28,
+        0
+      ],
+      [
+        0,
+        9,
+        106,
+        0
+      ],
+      [
+        0,
+        0,
+        25,
+        12
+      ]
+    ],
+    "per_class_metrics": {
+      "LOW": {
+        "class_index": 0,
+        "class_label": "LOW",
+        "precision": 0.0,
+        "recall": 0.0,
+        "f1_score": 0.0,
+        "support": 13
+      },
+      "MEDIUM": {
+        "class_index": 1,
+        "class_label": "MEDIUM",
+        "precision": 0.6812,
+        "recall": 0.6267,
+        "f1_score": 0.6528,
+        "support": 75
+      },
+      "HIGH": {
+        "class_index": 2,
+        "class_label": "HIGH",
+        "precision": 0.6667,
+        "recall": 0.9217,
+        "f1_score": 0.7737,
+        "support": 115
+      },
+      "CRITICAL": {
+        "class_index": 3,
+        "class_label": "CRITICAL",
+        "precision": 1.0,
+        "recall": 0.3243,
+        "f1_score": 0.4898,
+        "support": 37
+      }
+    }
+  },
+  "feature_importances": {
+    "severity": 0.2848,
+    "days_overdue": 0.0952,
+    "asset_age_years": 0.0415,
+    "days_since_last_inspection": 0.109,
+    "previous_failure_count": 0.1856,
+    "traffic_density_rank": 0.0402,
+    "corridor_utilization_pct": 0.0455,
+    "maintenance_duration_mins": 0.0225,
+    "weather_risk_factor": 0.0504,
+    "department_SMMS": 0.0032,
+    "department_TDMS": 0.0077,
+    "department_TMS": 0.0063,
+    "defect_type_AXLE_COUNTER_RESET": 0.0024,
+    "defect_type_BALLAST_DEFICIENCY": 0.0011,
+    "defect_type_CABLE_INSULATION_LOW": 0.0047,
+    "defect_type_CANTILEVER_INSULATOR_FLASH": 0.0071,
+    "defect_type_CATENARY_TENSION_LOW": 0.002,
+    "defect_type_CONTACT_WIRE_WEAR": 0.0016,
+    "defect_type_DATA_LOGGER_FAIL": 0.0031,
+    "defect_type_DRAINAGE_CLEARANCE": 0.0026,
+    "defect_type_EARTH_LEAKAGE": 0.0052,
+    "defect_type_FEEDER_BREAKER_TRIP": 0.0037,
+    "defect_type_FISHPLATE_CRACK": 0.0005,
+    "defect_type_GAUGE_CORRECTION": 0.0015,
+    "defect_type_INTERLOCKING_CIRCUIT_FAULT": 0.0091,
+    "defect_type_ISOLATOR_SWITCH_JAM": 0.0023,
+    "defect_type_LC_FLANGEWAY_CLEAN": 0.0019,
+    "defect_type_MAST_EARTHING_LOOSE": 0.0022,
+    "defect_type_NEUTRAL_SECTION_ARCING": 0.0009,
+    "defect_type_OHE_DROPPER_SNAP": 0.0044,
+    "defect_type_PANTOGRAPH_ENTANGLEMENT_RISK": 0.0091,
+    "defect_type_POINT_MACHINE_FAILURE": 0.0015,
+    "defect_type_POWER_SUPPLY_FLUCTUATION": 0.0009,
+    "defect_type_RAIL_CORRUGATION": 0.0014,
+    "defect_type_RELAY_CHATTER": 0.0008,
+    "defect_type_SEJ_GAP_ABNORMAL": 0.005,
+    "defect_type_SIGNAL_LAMP_FUSED": 0.0037,
+    "defect_type_SLEEPER_LOOSENING": 0.0021,
+    "defect_type_TRACK_CIRCUIT_DROP": 0.0022,
+    "defect_type_TRACK_TWIST": 0.0115,
+    "defect_type_TURNOUT_WEAR": 0.003,
+    "defect_type_USFD_MICRO_CRACK": 0.0029,
+    "defect_type_WELD_FRACTURE": 0.0076
+  },
+  "dataset_summary": {
+    "total_records": 1200,
+    "dataset_type": "RailSync synthetic prototype training data",
+    "class_distribution": {
+      "LOW": 46,
+      "MEDIUM": 391,
+      "HIGH": 601,
+      "CRITICAL": 162
+    },
+    "department_distribution": {
+      "TMS": 529,
+      "SMMS": 360,
+      "TDMS": 311
+    },
+    "features_available": [
+      "department",
+      "defect_type",
+      "severity",
+      "days_overdue",
+      "asset_age_years",
+      "days_since_last_inspection",
+      "previous_failure_count",
+      "traffic_density_rank",
+      "corridor_utilization_pct",
+      "maintenance_duration_mins",
+      "weather_risk_factor"
+    ],
+    "target_variable": "failure_risk_class (LOW, MEDIUM, HIGH, CRITICAL)"
+  }
+}

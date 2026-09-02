@@ -21,7 +21,7 @@ import {
 import { motion, AnimatePresence } from "motion/react";
 import { Language, translations } from "../lib/translations";
 
-export type NavTab = "network" | "corridors" | "prioritization" | "schedules" | "assets" | "analytics";
+export type NavTab = "network" | "corridors" | "prioritization" | "ml_intelligence" | "schedules" | "assets" | "analytics";
 
 interface HeaderProps {
   activeTab: NavTab;
@@ -67,6 +67,7 @@ export const Header: React.FC<HeaderProps> = ({
     { id: "network", label: t.navNetwork, code: "SYS-01" },
     { id: "corridors", label: t.navCorridors, code: "SEC-07" },
     { id: "prioritization", label: t.navPrioritization || "AI Prioritization", code: "PRI-02" },
+    { id: "ml_intelligence", label: "ML Intelligence", code: "ML-RF" },
     { id: "schedules", label: t.navSchedules, code: "COA-4" },
     { id: "assets", label: t.navAssets, code: "TMS-8" },
     { id: "analytics", label: t.navAnalytics, code: "ANL-09" },

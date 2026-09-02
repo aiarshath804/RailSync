@@ -14,6 +14,7 @@ import { SettingsModal, AppSettingsState } from "./components/SettingsModal";
 import { ProfileModal, OperatorProfile } from "./components/ProfileModal";
 import { CadMapModal } from "./components/CadMapModal";
 import { AnalyticsView } from "./components/AnalyticsView";
+import { MLIntelligenceView } from "./components/MLIntelligenceView";
 import { DataPipelineModal } from "./components/DataPipelineModal";
 import { SafetyGuardrailModal } from "./components/SafetyGuardrailModal";
 import { motion, AnimatePresence } from "motion/react";
@@ -284,6 +285,19 @@ export default function App() {
                     handleOpenWorkOrder(req.asset_id);
                   }}
                 />
+              </motion.div>
+            )}
+
+            {activeTab === "ml_intelligence" && (
+              <motion.div
+                key="ml_intelligence"
+                initial={{ opacity: 0, y: 8 }}
+                animate={{ opacity: 1, y: 0 }}
+                exit={{ opacity: 0, y: -8 }}
+                transition={{ duration: 0.18 }}
+                className="flex-1 flex flex-col"
+              >
+                <MLIntelligenceView lang={lang} />
               </motion.div>
             )}
 

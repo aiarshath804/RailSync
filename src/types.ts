@@ -122,6 +122,125 @@ export interface PrioritizationConfigSummary {
   prototype_disclaimer: string;
 }
 
+export interface MLRiskAssessment {
+  model_version: string;
+  predicted_risk_level: "CRITICAL" | "HIGH" | "MEDIUM" | "LOW" | string;
+  failure_risk_probability: number;
+  model_confidence: number;
+  is_low_confidence: boolean;
+  top_feature_contributions: Array<{
+    feature: string;
+    importance_weight: number;
+    raw_value: any;
+    contribution_score: number;
+    direction: string;
+  }>;
+  explanation: string;
+  class_probabilities?: Record<string, number>;
+}
+
+export interface MLModelStatus {
+  status: string;
+  model_type: string;
+  model_version: string;
+  trained_at: string;
+  is_trained: boolean;
+  summary_metrics: {
+    accuracy: number;
+    macro_f1: number;
+    weighted_f1: number;
+    brier_score: number;
+    test_samples: number;
+  };
+  top_features: Array<[string, number]>;
+  dataset_info?: {
+    total_records: number;
+    dataset_type: string;
+    target_variable: string;
+  };
+  disclaimer: string;
+}
+
+export interface MLEvaluationMetrics {
+  model_version: string;
+  evaluated_at: string;
+  evaluation_metrics: {
+    total_test_samples: number;
+    accuracy: number;
+    macro_precision: number;
+    macro_recall: number;
+    macro_f1: number;
+    weighted_precision: number;
+    weighted_recall: number;
+    weighted_f1: number;
+    brier_score: number;
+    class_labels: string[];
+    confusion_matrix: number[][];
+    per_class_metrics: Record<string, {
+      class_index: number;
+      class_label: string;
+      precision: number;
+      recall: number;
+      f1_score: number;
+      support: number;
+    }>;
+  };
+  feature_importances: Record<string, number>;
+  dataset_summary: {
+    total_records: number;
+    dataset_type: string;
+    class_distribution: Record<string, number>;
+    department_distribution: Record<string, number>;
+    features_available: string[];
+    target_variable: string;
+  };
+}
+
+export interface BaselineComparisonReport {
+  status: string;
+  evaluated_at: string;
+  workload_summary: {
+    total_maintenance_requests: number;
+    corridors_involved: string[];
+    departments_involved: string[];
+  };
+  comparison_metrics: {
+    blocks_required: {
+      baseline: number;
+      railsync: number;
+      reduction: number;
+      reduction_pct: number;
+    };
+    possession_hours: {
+      baseline_hours: number;
+      railsync_hours: number;
+      saved_hours: number;
+      efficiency_gain_pct: number;
+    };
+    asset_availability: {
+      baseline_availability_pct: number;
+      railsync_availability_pct: number;
+      improvement_pts: number;
+    };
+    traffic_disruption: {
+      baseline_delay_minutes: number;
+      railsync_delay_minutes: number;
+      delay_minutes_saved: number;
+    };
+    critical_risks_identified: {
+      baseline_detected: number;
+      railsync_detected: number;
+      latent_risks_surfaced_by_ml: number;
+    };
+    safety_and_rules_compliance: {
+      baseline_compliance_pct: number;
+      railsync_compliance_pct: number;
+      violations_prevented_by_guardrails: number;
+    };
+  };
+  executive_summary: string;
+}
+
 export interface PrioritizationScenario {
   id: string;
   title: string;
@@ -143,3 +262,23 @@ export interface PrioritizationScenario {
   priority_difference?: number;
   verified: boolean;
 }
+
+export interface Step6Scenario {
+  scenario_id: string;
+  title: string;
+  description: string;
+  input_request?: Record<string, any>;
+  ml_prediction?: MLRiskAssessment;
+  prioritization_result?: Record<string, any>;
+  explainability?: string;
+  top_drivers?: any[];
+  statistical_ml_assessment?: any;
+  authoritative_safety_guardrail?: any;
+  final_operational_priority?: any;
+  confidence_metrics?: any;
+  pipeline_stages?: any;
+  comparison_report?: BaselineComparisonReport;
+  verification_passed: boolean;
+  verification_notes: string;
+}
+

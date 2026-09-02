@@ -73,7 +73,7 @@ async function startServer() {
     res.json({ status: "ok", gateway: "RailSync Express-Vite Gateway" });
   });
 
-  // Reverse proxy all /api/* routes directly to the authoritative Python FastAPI backend
+  // Reverse proxy all /api/* routes directly to the authoritative Python backend
   const apiProxy = createProxyMiddleware({
     target: FASTAPI_TARGET,
     changeOrigin: true,
@@ -83,15 +83,22 @@ async function startServer() {
         console.error("[Proxy Error]", err.message);
         if ("writeHead" in res && typeof res.writeHead === "function") {
           res.writeHead(502, { "Content-Type": "application/json" });
-          res.end(JSON.stringify({ error: "FastAPI backend starting or unreachable. Please retry shortly." }));
+          res.end(JSON.stringify({ error: "Backend starting or unreachable. Please retry shortly." }));
         }
       },
     },
   });
 
-  app.use("/api", apiProxy);
-  app.use("/docs", createProxyMiddleware({ target: FASTAPI_TARGET, changeOrigin: true }));
-  app.use("/openapi.json", createProxyMiddleware({ target: FASTAPI_TARGET, changeOrigin: true }));
+  app.use((req, res, next) => {
+    if (
+      req.path.startsWith("/api") ||
+      req.path.startsWith("/docs") ||
+      req.path === "/openapi.json"
+    ) {
+      return apiProxy(req, res, next);
+    }
+    next();
+  });
 
   // Vite development middleware or static asset serving in production
   if (process.env.NODE_ENV !== "production") {

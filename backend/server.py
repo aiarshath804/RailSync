@@ -32,6 +32,15 @@ from backend.core.safety_config import SafetyConfig
 from backend.services.safety_guardrail_service import SafetyGuardrailService
 from backend.services.safety_scenarios import SafetyScenarioRunner
 from backend.services.optimization_service import OptimizationService
+from backend.services.corridor_availability_service import CorridorAvailabilityEngine
+from backend.services.operational_validator_service import OperationalValidatorService
+from backend.services.tactical_planning_service import TacticalPlanningService
+from backend.services.what_if_simulation_service import WhatIfSimulationService
+from backend.services.step5_scenarios import Step5ScenarioRunner
+from backend.services.ml_service import MLDecisionService
+from backend.services.baseline_comparison_service import BaselineComparisonService
+from backend.services.step6_scenarios import Step6ScenarioRunner
+from backend.services.step7_validation_service import Step7ValidationService
 
 # Initialize database and singletons
 init_db()
@@ -175,6 +184,96 @@ class RailSyncAPIHandler(BaseHTTPRequestHandler):
             self.wfile.write(json.dumps(scenarios).encode("utf-8"))
             return
 
+        # Step 5 Demonstration Scenarios (8 core block planning & dynamic corridor optimization tests)
+        if path in ["/api/v1/optimize/step5-scenarios", "/api/v1/optimize/step5/scenarios"]:
+            scenarios = Step5ScenarioRunner.run_all_step5_scenarios()
+            self._set_headers(200)
+            self.wfile.write(json.dumps(scenarios).encode("utf-8"))
+            return
+
+        # Step 6 - ML Model Status
+        if path == "/api/v1/ml/status":
+            status_data = MLDecisionService.get_model_status()
+            self._set_headers(200)
+            self.wfile.write(json.dumps(status_data).encode("utf-8"))
+            return
+
+        # Step 6 - ML Evaluation Metrics
+        if path == "/api/v1/ml/metrics":
+            metrics_data = MLDecisionService.get_evaluation_metrics()
+            self._set_headers(200)
+            self.wfile.write(json.dumps(metrics_data).encode("utf-8"))
+            return
+
+        # Step 6 - Demonstration Scenarios (6 core real ML tests)
+        if path in ["/api/v1/ml/scenarios", "/api/v1/ml/step6-scenarios", "/api/v1/ml/step6/scenarios"]:
+            scenarios = Step6ScenarioRunner.run_all_step6_scenarios()
+            self._set_headers(200)
+            self.wfile.write(json.dumps(scenarios).encode("utf-8"))
+            return
+
+        # Step 6 - Baseline vs RailSync Comparison (GET)
+        if path == "/api/v1/ml/baseline-comparison":
+            requests = repo.get_all_requests()
+            trains = repo.get_all_trains()
+            assets = repo.get_all_assets()
+            comp = BaselineComparisonService.compare_workload(requests, train_schedules=trains, assets=assets)
+            self._set_headers(200)
+            self.wfile.write(json.dumps(comp).encode("utf-8"))
+            return
+
+        # Candidate Block Windows (GET)
+        if path == "/api/v1/optimize/candidate-windows":
+            corridor_id = query.get("corridor_id", ["NDLS-HWH-01"])[0]
+            horizon_hours = float(query.get("horizon_hours", [24.0])[0])
+            min_dur = int(query.get("min_duration_minutes", [60])[0])
+            now = datetime.datetime.now()
+            trains = repo.get_all_trains()
+            candidate_windows = CorridorAvailabilityEngine.generate_candidate_windows(
+                corridor_id=corridor_id,
+                train_schedules=trains,
+                start_time=now,
+                end_time=now + datetime.timedelta(hours=horizon_hours),
+                min_window_duration_mins=min_dur
+            )
+            self._set_headers(200)
+            self.wfile.write(json.dumps({
+                "status": "SUCCESS",
+                "corridor_id": corridor_id,
+                "horizon_hours": horizon_hours,
+                "total_candidate_windows": len(candidate_windows),
+                "candidate_windows": candidate_windows
+            }).encode("utf-8"))
+            return
+
+        # Corridor Availability & Timeline (GET)
+        if path == "/api/v1/optimize/corridor-availability":
+            corridor_id = query.get("corridor_id", ["NDLS-HWH-01"])[0]
+            horizon_hours = float(query.get("horizon_hours", [24.0])[0])
+            now = datetime.datetime.now()
+            trains = repo.get_all_trains()
+            blocks = repo.get_all_blocks()
+            timeline = CorridorAvailabilityEngine.get_corridor_occupancy_timeline(
+                corridor_id=corridor_id,
+                train_schedules=trains,
+                start_time=now,
+                end_time=now + datetime.timedelta(hours=horizon_hours)
+            )
+            tot_possession_hrs = sum(int(b.get("duration_minutes", 60)) / 60.0 for b in blocks if b.get("corridor_id") == corridor_id or corridor_id == "ALL")
+            avail = CorridorAvailabilityEngine.calculate_corridor_asset_availability(
+                total_corridors=12,
+                horizon_hours=horizon_hours,
+                total_possession_hours=tot_possession_hrs
+            )
+            self._set_headers(200)
+            self.wfile.write(json.dumps({
+                "status": "SUCCESS",
+                "corridor_id": corridor_id,
+                "occupancy_timeline": timeline,
+                "availability_metrics": avail
+            }).encode("utf-8"))
+            return
+
         # Safety Audit Logs
         if path == "/api/v1/safety/audit-logs":
             limit = int(query.get("limit", [50])[0])
@@ -237,6 +336,8 @@ class RailSyncAPIHandler(BaseHTTPRequestHandler):
                 r_copy["priority_level"] = r_copy.get("priority_level") or eval_res["priority_level"]
                 r_copy["safety_override"] = bool(r_copy.get("safety_override") or eval_res["safety_override"])
                 r_copy["override_reason"] = r_copy.get("override_reason") or eval_res["override_reason"]
+                r_copy["model_used"] = eval_res.get("model_used", "RailSync-RF-v1.2.0")
+                r_copy["ml_risk_assessment"] = eval_res.get("ml_risk_assessment")
                 r_copy["explanation"] = eval_res["explanation"]
                 evaluated.append(r_copy)
 
@@ -291,7 +392,7 @@ class RailSyncAPIHandler(BaseHTTPRequestHandler):
             return
 
         # Corridor State
-        if path == "/api/v1/dashboard/corridor-state":
+        if path in ["/api/v1/dashboard/corridor-state", "/api/v1/corridor-state"]:
             res = {
                 "assets": repo.get_all_assets(),
                 "train_schedules": repo.get_all_trains(),
@@ -354,6 +455,67 @@ class RailSyncAPIHandler(BaseHTTPRequestHandler):
                     time.sleep(3)
             except Exception:
                 pass
+            return
+
+        # -------------------------------------------------------------
+        # STEP 7 - End-to-End System Validation & Demo Mode GET Routes
+        # -------------------------------------------------------------
+        # Run 19-stage Full E2E Pipeline Integration Test
+        if path == "/api/v1/validation/run-e2e":
+            e2e_res = Step7ValidationService.run_full_e2e_integration_test()
+            self._set_headers(200)
+            self.wfile.write(json.dumps(e2e_res).encode("utf-8"))
+            return
+
+        # Load / View SIH Demo Day Scenario
+        if path == "/api/v1/demo/load-scenario":
+            demo_res = Step7ValidationService.load_demo_day_scenario(persist=False)
+            self._set_headers(200)
+            self.wfile.write(json.dumps(demo_res).encode("utf-8"))
+            return
+
+        # Demo Mode Status
+        if path == "/api/v1/demo/status":
+            requests = repo.get_all_requests()
+            blocks = repo.get_all_blocks()
+            demo_req_count = sum(1 for r in requests if r.get("is_demo") or "[DEMO" in str(r.get("notes", "")))
+            self._set_headers(200)
+            self.wfile.write(json.dumps({
+                "status": "OPERATIONAL",
+                "demo_mode_active": demo_req_count > 0,
+                "demo_requests_count": demo_req_count,
+                "total_requests_count": len(requests),
+                "total_blocks_count": len(blocks),
+                "disclaimer": Step7ValidationService.PROTOTYPE_DISCLAIMER
+            }).encode("utf-8"))
+            return
+
+        # Regression Suite (Steps 1 through 6)
+        if path == "/api/v1/validation/regression-suite":
+            reg_res = Step7ValidationService.run_regression_suite()
+            self._set_headers(200)
+            self.wfile.write(json.dumps(reg_res).encode("utf-8"))
+            return
+
+        # Performance & Latency Benchmarks
+        if path == "/api/v1/validation/benchmarks":
+            bench_res = Step7ValidationService.run_performance_benchmarks()
+            self._set_headers(200)
+            self.wfile.write(json.dumps(bench_res).encode("utf-8"))
+            return
+
+        # Fail-Safe & Error Handling Audit
+        if path == "/api/v1/validation/fail-safes":
+            err_res = Step7ValidationService.test_error_handling_and_fail_safes()
+            self._set_headers(200)
+            self.wfile.write(json.dumps(err_res).encode("utf-8"))
+            return
+
+        # 21-Component Authoritative Verification Matrix
+        if path == "/api/v1/validation/matrix":
+            matrix_res = Step7ValidationService.get_final_verification_matrix()
+            self._set_headers(200)
+            self.wfile.write(json.dumps(matrix_res).encode("utf-8"))
             return
 
         self._set_headers(404)
@@ -571,6 +733,66 @@ class RailSyncAPIHandler(BaseHTTPRequestHandler):
             self.wfile.write(json.dumps({"status": "SUCCESS", "validation_report": val_report}).encode("utf-8"))
             return
 
+        # Step 5 - Post-Optimization Operational Validator (6-point validation)
+        if path == "/api/v1/optimize/validate-plan":
+            blocks = json_body.get("blocks", repo.get_all_blocks())
+            requests = json_body.get("requests", repo.get_all_requests())
+            trains = json_body.get("train_schedules", repo.get_all_trains())
+            assets = repo.get_all_assets()
+            val_report = OperationalValidatorService.validate_plan(
+                blocks, requests, trains, assets=assets
+            )
+            self._set_headers(200)
+            self.wfile.write(json.dumps({"status": "SUCCESS", "validation_report": val_report}).encode("utf-8"))
+            return
+
+        # Step 5 - Tactical & Rolling Horizon Planning
+        if path == "/api/v1/optimize/tactical-plan":
+            horizon_days = int(json_body.get("horizon_days", 7))
+            requests = json_body.get("requests", repo.get_all_requests())
+            trains = json_body.get("train_schedules", repo.get_all_trains())
+            assets = repo.get_all_assets()
+            prev_blocks = json_body.get("previous_plan")
+            plan_res = TacticalPlanningService.generate_tactical_plan(
+                requests=requests,
+                train_schedules=trains,
+                assets=assets,
+                horizon_days=horizon_days,
+                previous_plan=prev_blocks
+            )
+            self._set_headers(200)
+            self.wfile.write(json.dumps(plan_res).encode("utf-8"))
+            return
+
+        # Step 5 - What-If Traffic & Disruption Simulation
+        if path == "/api/v1/optimize/what-if-simulation":
+            multiplier = float(json_body.get("traffic_multiplier", 1.40))
+            added_freight = int(json_body.get("added_freight_count", 6))
+            delay_mins = int(json_body.get("delay_minutes_injection", 0))
+            corridor_id = json_body.get("corridor_id", "NDLS-HWH-01")
+            requests = json_body.get("requests", repo.get_all_requests())
+            trains = json_body.get("train_schedules", repo.get_all_trains())
+            assets = repo.get_all_assets()
+            sim_res = WhatIfSimulationService.simulate_traffic_surge(
+                base_requests=requests,
+                base_trains=trains,
+                assets=assets,
+                traffic_multiplier=multiplier,
+                added_freight_count=added_freight,
+                delay_minutes_injection=delay_mins,
+                corridor_id=corridor_id
+            )
+            self._set_headers(200)
+            self.wfile.write(json.dumps(sim_res).encode("utf-8"))
+            return
+
+        # Step 5 - Run All Scenarios (POST)
+        if path in ["/api/v1/optimize/step5-scenarios/run-all", "/api/v1/optimize/step5/scenarios/run-all"]:
+            scenarios = Step5ScenarioRunner.run_all_step5_scenarios()
+            self._set_headers(200)
+            self.wfile.write(json.dumps(scenarios).encode("utf-8"))
+            return
+
         # 7. Safety Manual Controller Override
         if path == "/api/v1/safety/manual-override":
             controller_id = json_body.get("controller_id", "CHIEF_CONTROLLER_01")
@@ -641,6 +863,46 @@ class RailSyncAPIHandler(BaseHTTPRequestHandler):
             self.wfile.write(json.dumps(preempt_res).encode("utf-8"))
             return
 
+        # Step 6 - ML Inference Endpoint (Single or Batch)
+        if path == "/api/v1/ml/predict":
+            if "requests" in json_body and isinstance(json_body["requests"], list):
+                batch_res = MLDecisionService.predict_batch_risk(json_body["requests"])
+                self._set_headers(200)
+                self.wfile.write(json.dumps({"status": "SUCCESS", "predictions": batch_res}).encode("utf-8"))
+                return
+            else:
+                req_obj = json_body.get("request", json_body)
+                pred_res = MLDecisionService.predict_request_risk(req_obj)
+                self._set_headers(200)
+                self.wfile.write(json.dumps({"status": "SUCCESS", "prediction": pred_res}).encode("utf-8"))
+                return
+
+        # Step 6 - Retrain ML Model
+        if path in ["/api/v1/ml/train", "/api/v1/ml/retrain"]:
+            n_est = int(json_body.get("n_estimators", 35))
+            max_d = int(json_body.get("max_depth", 6))
+            train_res = MLDecisionService.retrain_model(n_estimators=n_est, max_depth=max_d)
+            self._set_headers(200)
+            self.wfile.write(json.dumps({"status": "SUCCESS", "training_results": train_res}).encode("utf-8"))
+            return
+
+        # Step 6 - Run All ML Scenarios (POST)
+        if path in ["/api/v1/ml/scenarios/run-all", "/api/v1/ml/step6-scenarios/run-all"]:
+            scenarios = Step6ScenarioRunner.run_all_step6_scenarios()
+            self._set_headers(200)
+            self.wfile.write(json.dumps(scenarios).encode("utf-8"))
+            return
+
+        # Step 6 - Baseline Comparison (POST)
+        if path == "/api/v1/ml/baseline-comparison":
+            requests = json_body.get("requests", repo.get_all_requests())
+            trains = json_body.get("train_schedules", repo.get_all_trains())
+            assets = repo.get_all_assets()
+            comp = BaselineComparisonService.compare_workload(requests, train_schedules=trains, assets=assets)
+            self._set_headers(200)
+            self.wfile.write(json.dumps(comp).encode("utf-8"))
+            return
+
         # 9. Approve Block
         if path == "/api/v1/optimize/approve-block":
             block_id = int(json_body.get("block_id", 0))
@@ -678,6 +940,66 @@ class RailSyncAPIHandler(BaseHTTPRequestHandler):
             }
             self._set_headers(200)
             self.wfile.write(json.dumps(res).encode("utf-8"))
+            return
+
+        # -------------------------------------------------------------
+        # STEP 7 - End-to-End System Validation & Demo Mode POST Routes
+        # -------------------------------------------------------------
+        # Run 19-stage Full E2E Pipeline Integration Test
+        if path == "/api/v1/validation/run-e2e":
+            e2e_res = Step7ValidationService.run_full_e2e_integration_test()
+            self._set_headers(200)
+            self.wfile.write(json.dumps(e2e_res).encode("utf-8"))
+            return
+
+        # Load Realistic SIH Demo Day Scenario
+        if path == "/api/v1/demo/load-scenario":
+            persist = bool(json_body.get("persist", True))
+            demo_res = Step7ValidationService.load_demo_day_scenario(persist=persist)
+            self._set_headers(200)
+            self.wfile.write(json.dumps(demo_res).encode("utf-8"))
+            return
+
+        # Safe Demo Data Reset
+        if path == "/api/v1/demo/reset":
+            reset_res = Step7ValidationService.reset_demo_data()
+            self._set_headers(200)
+            self.wfile.write(json.dumps(reset_res).encode("utf-8"))
+            return
+
+        # Emergency Replanning Validation Test
+        if path == "/api/v1/validation/emergency-replan":
+            emg_res = Step7ValidationService.test_emergency_replanning()
+            self._set_headers(200)
+            self.wfile.write(json.dumps(emg_res).encode("utf-8"))
+            return
+
+        # What-If Simulation Validation Test
+        if path == "/api/v1/validation/what-if":
+            what_if_res = Step7ValidationService.test_what_if_simulations()
+            self._set_headers(200)
+            self.wfile.write(json.dumps(what_if_res).encode("utf-8"))
+            return
+
+        # Performance Benchmarks Execution
+        if path == "/api/v1/validation/benchmarks":
+            bench_res = Step7ValidationService.run_performance_benchmarks()
+            self._set_headers(200)
+            self.wfile.write(json.dumps(bench_res).encode("utf-8"))
+            return
+
+        # Fail-Safe & Error Handling Test
+        if path == "/api/v1/validation/fail-safes":
+            err_res = Step7ValidationService.test_error_handling_and_fail_safes()
+            self._set_headers(200)
+            self.wfile.write(json.dumps(err_res).encode("utf-8"))
+            return
+
+        # Regression Suite (Steps 1 through 6)
+        if path == "/api/v1/validation/regression-suite":
+            reg_res = Step7ValidationService.run_regression_suite()
+            self._set_headers(200)
+            self.wfile.write(json.dumps(reg_res).encode("utf-8"))
             return
 
         self._set_headers(404)

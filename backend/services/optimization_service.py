@@ -23,7 +23,9 @@ class OptimizationService:
         cls,
         requests: List[Dict[str, Any]],
         train_schedules: List[Dict[str, Any]],
-        assets: Optional[List[Dict[str, Any]]] = None
+        assets: Optional[List[Dict[str, Any]]] = None,
+        time_horizon_hours: Optional[int] = None,
+        **kwargs
     ) -> Dict[str, Any]:
         """
         Orchestrates mathematical schedule optimization with safety guardrails.
