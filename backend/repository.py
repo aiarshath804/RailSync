@@ -228,6 +228,16 @@ class RailSyncRepository:
         finally:
             conn.close()
 
+    def update_request_status(self, request_id: int, status: str) -> bool:
+        conn = get_connection()
+        try:
+            cursor = conn.cursor()
+            cursor.execute("UPDATE maintenance_requests SET status = ? WHERE id = ?;", (status, request_id))
+            conn.commit()
+            return cursor.rowcount > 0
+        finally:
+            conn.close()
+
     # -------------------------------------------------------------
     # Train Schedules & Duplicate Detection
     # -------------------------------------------------------------
@@ -419,7 +429,7 @@ class RailSyncRepository:
                 ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?);
                 """, (
                     b.get("id"),
-                    b.get("corridor_id", "NDLS-HWH-01"),
+                    b.get("corridor_id", "MAS-TRL-05"),
                     bundled_json,
                     s_start,
                     s_end,

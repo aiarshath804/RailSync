@@ -314,7 +314,7 @@ class COAAdapter(BaseAdapter):
         else:
             priority = "EXPRESS"
 
-        corridor_raw = cls.get_field_any(raw, ["corridor_id", "corridorId", "corridor", "line_section", "section"], "NDLS-HWH-01")
+        corridor_raw = cls.get_field_any(raw, ["corridor_id", "corridorId", "corridor", "line_section", "section"], "MAS-TRL-05")
         corridor = LocationNormalizer.normalize_corridor(corridor_raw)
 
         # Dates

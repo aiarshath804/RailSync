@@ -236,7 +236,7 @@ export const ProfileModal: React.FC<ProfileModalProps> = ({
               </div>
 
               <div className="text-[11px] text-slate-700 leading-relaxed bg-white p-3 rounded-lg border border-slate-200">
-                Active interlocking sector: <strong>NDLS-CNB Trunk (KM 0.0 - 440.0)</strong>. Current train occupancy density: <strong>76%</strong>. High-speed envelope active for <strong>NDLS-HWH Rajdhani (12301)</strong>.
+                Active interlocking sector: <strong>MAS-TRL B1–B5 Trunk (KM 0.0 - 41.8)</strong>. Current train occupancy density: <strong>76%</strong>. High-speed envelope active for <strong>Mangalore Mail (12601)</strong>.
               </div>
 
               {handoverReportGenerated ? (
@@ -246,7 +246,7 @@ export const ProfileModal: React.FC<ProfileModalProps> = ({
                     <span>Shift Handover Summary Exported to Next Controller (OP-403)</span>
                   </div>
                   <p className="text-[10px] text-emerald-700">
-                    All open track possession permits (BLOCK-2001) and catenary maintenance windows synced to central IR-TMS database.
+                    All open track possession permits (BLOCK-101) and catenary maintenance windows synced to central IR-TMS database.
                   </p>
                 </div>
               ) : (

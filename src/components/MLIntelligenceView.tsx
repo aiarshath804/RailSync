@@ -162,7 +162,7 @@ export const MLIntelligenceView: React.FC<MLIntelligenceViewProps> = ({ lang = "
         days_since_last_inspection: sbInspectionDays,
         asset_age_years: sbAssetAge,
         weather_risk_factor: sbWeatherRisk,
-        corridor_id: "NDLS-HWH-01"
+        corridor_id: "MAS-TRL-05"
       };
 
       const res = await fetch("/api/v1/ml/predict", {

@@ -16,10 +16,18 @@ import {
   Radio,
   FileText,
   AlertTriangle,
-  ChevronDown
+  ChevronDown,
+  Play,
+  Square,
+  LogOut,
+  UserCheck,
+  RefreshCw
 } from "lucide-react";
 import { motion, AnimatePresence } from "motion/react";
 import { Language, translations } from "../lib/translations";
+import { useLiveData } from "../contexts/LiveDataContext";
+import { useAuth } from "../contexts/AuthContext";
+import { UserRole } from "../types";
 
 export type NavTab = "network" | "corridors" | "prioritization" | "ml_intelligence" | "schedules" | "assets" | "analytics";
 
@@ -61,17 +69,43 @@ export const Header: React.FC<HeaderProps> = ({
   unreadAlertsCount = 0
 }) => {
   const [fontSize, setFontSize] = useState<"sm" | "base" | "lg">("base");
+  const [isAccountMenuOpen, setIsAccountMenuOpen] = useState(false);
+  const [isSwitchingRole, setIsSwitchingRole] = useState(false);
   const t = translations[lang] || translations.EN;
+  const { controlState, handleControlAction } = useLiveData();
+  const { user, logout, demoAccounts, loginAsDemoRole, hasPermission } = useAuth();
+  const isLiveActive = controlState.pollingEnabled;
 
-  const navItems: { id: NavTab; label: string; code: string }[] = [
-    { id: "network", label: t.navNetwork, code: "SYS-01" },
-    { id: "corridors", label: t.navCorridors, code: "SEC-07" },
-    { id: "prioritization", label: t.navPrioritization || "AI Prioritization", code: "PRI-02" },
-    { id: "ml_intelligence", label: "ML Intelligence", code: "ML-RF" },
-    { id: "schedules", label: t.navSchedules, code: "COA-4" },
-    { id: "assets", label: t.navAssets, code: "TMS-8" },
-    { id: "analytics", label: t.navAnalytics, code: "ANL-09" },
+  const allNavItems: { id: NavTab; label: string; code: string; perm?: string }[] = [
+    { id: "network", label: t.navNetwork, code: "SYS-01", perm: "VIEW_LIVE_OPERATIONS" },
+    { id: "corridors", label: t.navCorridors, code: "SEC-07", perm: "VIEW_CORRIDOR" },
+    { id: "prioritization", label: t.navPrioritization || "AI Prioritization", code: "PRI-02", perm: "VIEW_PRIORITIZATION" },
+    { id: "ml_intelligence", label: "ML Intelligence", code: "ML-RF", perm: "VIEW_ML_INTELLIGENCE" },
+    { id: "schedules", label: t.navSchedules, code: "COA-4", perm: "VIEW_SCHEDULES" },
+    { id: "assets", label: t.navAssets, code: "TMS-8", perm: "VIEW_ALL_REQUESTS" },
+    { id: "analytics", label: t.navAnalytics, code: "ANL-09", perm: "VIEW_ANALYTICS" },
   ];
+
+  const navItems = allNavItems.filter((item) => !item.perm || hasPermission(item.perm));
+
+  const getRoleColor = (role?: string) => {
+    switch (role) {
+      case "ADMINISTRATOR":
+        return { bg: "bg-amber-600", text: "text-amber-400", border: "border-amber-400", badge: "bg-amber-100 text-amber-900 border-amber-300" };
+      case "ENGINEERING":
+        return { bg: "bg-emerald-600", text: "text-emerald-400", border: "border-emerald-400", badge: "bg-emerald-100 text-emerald-900 border-emerald-300" };
+      case "TRACTION":
+        return { bg: "bg-cyan-600", text: "text-cyan-400", border: "border-cyan-400", badge: "bg-cyan-100 text-cyan-900 border-cyan-300" };
+      case "SIGNAL_TELECOM":
+        return { bg: "bg-indigo-600", text: "text-indigo-400", border: "border-indigo-400", badge: "bg-indigo-100 text-indigo-900 border-indigo-300" };
+      case "OPERATIONS_CONTROLLER":
+        return { bg: "bg-rose-600", text: "text-rose-400", border: "border-rose-400", badge: "bg-rose-100 text-rose-900 border-rose-300" };
+      default:
+        return { bg: "bg-blue-600", text: "text-blue-400", border: "border-blue-400", badge: "bg-blue-100 text-blue-900 border-blue-300" };
+    }
+  };
+
+  const roleStyles = getRoleColor(user?.role);
 
   return (
     <header className="w-full sticky top-0 z-40 flex flex-col shadow-md font-sans select-none">
@@ -266,19 +300,154 @@ export const Header: React.FC<HeaderProps> = ({
             <Settings className="w-4 h-4 text-blue-950" />
           </button>
 
-          {/* Official Controller ID Badge */}
-          <div 
-            onClick={onProfileClick}
-            className="flex items-center space-x-2 pl-2 border-l border-slate-300 cursor-pointer group"
-            title="Dispatcher Profile & Shift Handover"
-          >
-            <div className="w-8 h-8 rounded bg-blue-950 text-amber-400 font-mono font-black text-xs flex items-center justify-center border border-amber-400 shadow-xs">
-              RTC
+          {/* Official Officer ID Badge & Role Switcher Popover */}
+          <div className="relative pl-2 border-l border-slate-300">
+            <div 
+              onClick={() => setIsAccountMenuOpen(!isAccountMenuOpen)}
+              className="flex items-center space-x-2 cursor-pointer group select-none hover:opacity-90 transition-opacity"
+              title="Official Officer Profile & Security Role Switcher"
+            >
+              <div className={`w-8 h-8 rounded ${roleStyles.bg} text-white font-mono font-black text-xs flex items-center justify-center border ${roleStyles.border} shadow-sm`}>
+                {user?.avatar_init || "RS"}
+              </div>
+              <div className="hidden lg:block text-left font-sans">
+                <div className="text-[11px] font-bold text-slate-900 leading-none flex items-center gap-1.5">
+                  <span>{user?.name ? user.name.split(" ")[0] + " " + (user.name.split(" ")[1] || "") : "Officer"}</span>
+                  <ChevronDown className="w-3 h-3 text-slate-500 group-hover:text-slate-900 transition-transform" />
+                </div>
+                <div className="text-[9px] text-slate-500 leading-tight font-mono flex items-center gap-1">
+                  <span className="font-semibold text-slate-700">{user?.console_id || "SEC-ADMIN-01"}</span>
+                  <span>&bull;</span>
+                  <span className="truncate max-w-[80px]">{user?.role ? user.role.split("_")[0] : "ADMIN"}</span>
+                </div>
+              </div>
             </div>
-            <div className="hidden lg:block text-left font-sans">
-              <div className="text-[11px] font-bold text-slate-900 leading-none">RTC-4092</div>
-              <div className="text-[9px] text-slate-500 leading-tight font-mono">Sr. Dispatcher</div>
-            </div>
+
+            {/* Account & Role Switcher Dropdown */}
+            <AnimatePresence>
+              {isAccountMenuOpen && (
+                <>
+                  <div
+                    className="fixed inset-0 z-40"
+                    onClick={() => setIsAccountMenuOpen(false)}
+                  />
+                  <motion.div
+                    initial={{ opacity: 0, scale: 0.95, y: -4 }}
+                    animate={{ opacity: 1, scale: 1, y: 0 }}
+                    exit={{ opacity: 0, scale: 0.95, y: -4 }}
+                    transition={{ duration: 0.15 }}
+                    className="absolute right-0 mt-2 w-80 bg-slate-900 border border-slate-700 rounded-xl shadow-2xl p-4 text-slate-100 z-50 font-sans"
+                  >
+                    {/* Header info */}
+                    <div className="flex items-start justify-between pb-3 border-b border-slate-800">
+                      <div>
+                        <div className="text-sm font-bold text-white flex items-center gap-1.5">
+                          <span>{user?.name || "Officer"}</span>
+                          <UserCheck className="w-4 h-4 text-emerald-400" />
+                        </div>
+                        <div className="text-xs text-slate-400 font-mono mt-0.5">
+                          {user?.email || "admin@railsync.gov.in"}
+                        </div>
+                        <div className="mt-1.5 flex items-center gap-1.5 flex-wrap">
+                          <span className={`text-[10px] font-mono px-2 py-0.5 rounded-full border font-bold ${roleStyles.badge}`}>
+                            {user?.role || "ADMINISTRATOR"}
+                          </span>
+                          <span className="text-[10px] font-mono px-2 py-0.5 rounded-full bg-slate-800 text-slate-300 border border-slate-700">
+                            {user?.console_id || "SEC-ADMIN-01"}
+                          </span>
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Department & Designation */}
+                    <div className="py-2.5 text-xs text-slate-300 border-b border-slate-800 space-y-1">
+                      <div className="flex justify-between text-slate-400 text-[11px]">
+                        <span>Department:</span>
+                        <span className="font-semibold text-slate-200">{user?.department_name || "Executive Console"}</span>
+                      </div>
+                      <div className="flex justify-between text-slate-400 text-[11px]">
+                        <span>Clearance:</span>
+                        <span className="font-semibold text-amber-400">{user?.badge_level || "Tier 1"}</span>
+                      </div>
+                    </div>
+
+                    {/* Quick Switch Role Section */}
+                    <div className="pt-3 pb-2">
+                      <div className="text-[10px] font-mono font-bold text-slate-400 uppercase tracking-wider mb-2 flex items-center justify-between">
+                        <span>Switch Operational Role</span>
+                        {isSwitchingRole && <RefreshCw className="w-3 h-3 text-blue-400 animate-spin" />}
+                      </div>
+                      <div className="grid grid-cols-1 gap-1.5">
+                        {demoAccounts.map((acc) => {
+                          const isCurrent = user?.role === acc.role;
+                          return (
+                            <button
+                              key={acc.role}
+                              type="button"
+                              disabled={isSwitchingRole}
+                              onClick={async () => {
+                                if (isCurrent) return;
+                                setIsSwitchingRole(true);
+                                await loginAsDemoRole(acc.role as UserRole);
+                                setIsSwitchingRole(false);
+                                setIsAccountMenuOpen(false);
+                              }}
+                              className={`w-full text-left px-2.5 py-1.5 rounded-lg text-xs flex items-center justify-between transition-colors ${
+                                isCurrent
+                                  ? "bg-slate-800 text-amber-400 font-bold border border-amber-500/30"
+                                  : "hover:bg-slate-800/80 text-slate-300 border border-transparent"
+                              }`}
+                            >
+                              <div className="flex items-center gap-2">
+                                <span className="w-5 h-5 rounded flex items-center justify-center font-mono text-[10px] font-bold bg-slate-800 text-slate-200">
+                                  {acc.avatar_init}
+                                </span>
+                                <div>
+                                  <span className="block leading-tight text-[11px]">{acc.role_label}</span>
+                                  <span className="block text-[9px] text-slate-500 leading-none">{acc.department}</span>
+                                </div>
+                              </div>
+                              {isCurrent && (
+                                <span className="text-[9px] font-mono text-emerald-400 font-semibold uppercase">
+                                  ACTIVE
+                                </span>
+                              )}
+                            </button>
+                          );
+                        })}
+                      </div>
+                    </div>
+
+                    {/* Footer Actions: Profile & Sign Out */}
+                    <div className="pt-2 border-t border-slate-800 flex items-center justify-between gap-2 mt-2">
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setIsAccountMenuOpen(false);
+                          if (onProfileClick) onProfileClick();
+                        }}
+                        className="text-xs text-slate-300 hover:text-white px-2.5 py-1.5 rounded-lg hover:bg-slate-800 transition flex items-center gap-1.5"
+                      >
+                        <User className="w-3.5 h-3.5 text-blue-400" />
+                        <span>Shift Console</span>
+                      </button>
+
+                      <button
+                        type="button"
+                        onClick={async () => {
+                          setIsAccountMenuOpen(false);
+                          await logout();
+                        }}
+                        className="text-xs text-rose-400 hover:text-rose-300 px-2.5 py-1.5 rounded-lg hover:bg-rose-950/40 border border-rose-900/40 transition flex items-center gap-1.5 font-semibold"
+                      >
+                        <LogOut className="w-3.5 h-3.5 text-rose-400" />
+                        <span>Sign Out</span>
+                      </button>
+                    </div>
+                  </motion.div>
+                </>
+              )}
+            </AnimatePresence>
           </div>
 
         </div>
@@ -313,11 +482,36 @@ export const Header: React.FC<HeaderProps> = ({
           })}
         </div>
 
-        {/* Right Nav Action: Quick Issue Advisory */}
-        <div className="hidden lg:flex items-center space-x-3 py-1">
+        {/* Right Nav Action: Single Start/Stop Live Data Button & Advisory */}
+        <div className="flex items-center space-x-2.5 py-1 shrink-0 ml-2">
+          {/* SINGLE START / STOP LIVE DATA BUTTON */}
           <button
+            onClick={() => handleControlAction(isLiveActive ? "STOP" : "START")}
+            disabled={controlState.loading}
+            className={`text-xs font-black font-sans tracking-wider px-3 py-1.5 rounded flex items-center space-x-1.5 shadow-md transition cursor-pointer border uppercase ${
+              isLiveActive
+                ? "bg-rose-600 hover:bg-rose-500 text-white border-rose-400 active:scale-95"
+                : "bg-emerald-600 hover:bg-emerald-500 text-white border-emerald-400 active:scale-95"
+            }`}
+            title={isLiveActive ? "Click to stop live data polling" : "Click to start live data polling"}
+          >
+            {isLiveActive ? (
+              <>
+                <Square className="w-3.5 h-3.5 fill-current text-white shrink-0" />
+                <span>STOP LIVE DATA</span>
+              </>
+            ) : (
+              <>
+                <Play className="w-3.5 h-3.5 fill-current text-white shrink-0" />
+                <span>START LIVE DATA</span>
+              </>
+            )}
+          </button>
+
+          <button
+            id="btn-dispatch-advisory"
             onClick={onOpenAdvisoryModal}
-            className="bg-amber-500 hover:bg-amber-400 text-blue-950 text-xs font-black px-3 py-1.5 rounded flex items-center space-x-1.5 shadow-sm transition cursor-pointer border border-amber-300 uppercase tracking-wide"
+            className="flex bg-amber-500 hover:bg-amber-400 text-blue-950 text-xs font-black px-3 py-1.5 rounded items-center space-x-1.5 shadow-sm transition cursor-pointer border border-amber-300 uppercase tracking-wide"
           >
             <AlertTriangle className="w-3.5 h-3.5 fill-blue-950 stroke-amber-500" />
             <span>{t.dispatchAdvisory}</span>

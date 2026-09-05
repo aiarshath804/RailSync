@@ -49,7 +49,7 @@ class CorridorAsset(Base):
     asset_id = Column(String(50), unique=True, nullable=False, index=True) # e.g. "TRK-01", "SIG-44", "OHE-09"
     name = Column(String(100), nullable=False)
     asset_type = Column(String(50), nullable=False) # TRACK, SIGNAL, OHE, CIVIL
-    line_section = Column(String(100), nullable=False) # e.g., "NDLS-HWH-01"
+    line_section = Column(String(100), nullable=False) # e.g., "MAS-TRL-05"
     start_km = Column(Float, nullable=False)
     end_km = Column(Float, nullable=False)
     speed_limit_kmh = Column(Integer, default=110)
@@ -65,8 +65,8 @@ class MaintenanceRequest(Base):
     department_code = Column(String(20), default="TMS", nullable=False)
     asset_id = Column(String(50), nullable=False, index=True) # String asset code e.g. "TRK-01"
     asset_type = Column(String(50), default="TRACK")
-    corridor_id = Column(String(100), default="NDLS-HWH-01")
-    section_id = Column(String(100), default="NDLS-HWH-01")
+    corridor_id = Column(String(100), default="MAS-TRL-05")
+    section_id = Column(String(100), default="MAS-TRL-05")
     location_start_km = Column(Float, default=0.0)
     location_end_km = Column(Float, default=5.0)
     work_type = Column(String(100), default="MAINTENANCE")
@@ -106,7 +106,7 @@ class TrainSchedule(Base):
     train_number = Column(String(50), nullable=False, index=True) # e.g. "12301"
     name = Column(String(100), nullable=False)
     priority_class = Column(String(50), default="EXPRESS", nullable=False) # RAJDHANI, EXPRESS, FREIGHT
-    corridor_id = Column(String(100), nullable=False) # e.g., "NDLS-HWH-01"
+    corridor_id = Column(String(100), nullable=False) # e.g., "MAS-TRL-05"
     section_id = Column(String(100), nullable=True)
     arrival_window_start = Column(DateTime, nullable=False)
     departure_window_end = Column(DateTime, nullable=False)

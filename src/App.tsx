@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from "react";
+import React, { useState } from "react";
 import { Header, NavTab } from "./components/Header";
 import { Sidebar, DepartmentCode } from "./components/Sidebar";
 import { CorridorsView } from "./components/CorridorsView";
@@ -9,6 +9,7 @@ import { PrioritizationView } from "./components/PrioritizationView";
 import { EmergencyModal } from "./components/EmergencyModal";
 import { WorkOrderModal } from "./components/WorkOrderModal";
 import { AIInsightsModal } from "./components/AIInsightsModal";
+import { DispatchAdvisoryModal } from "./components/DispatchAdvisoryModal";
 import { NotificationsModal, NotificationItem } from "./components/NotificationsModal";
 import { SettingsModal, AppSettingsState } from "./components/SettingsModal";
 import { ProfileModal, OperatorProfile } from "./components/ProfileModal";
@@ -17,10 +18,15 @@ import { AnalyticsView } from "./components/AnalyticsView";
 import { MLIntelligenceView } from "./components/MLIntelligenceView";
 import { DataPipelineModal } from "./components/DataPipelineModal";
 import { SafetyGuardrailModal } from "./components/SafetyGuardrailModal";
+import { LiveApiControlPanel } from "./components/LiveApiControlPanel";
+import { LiveDataProvider, useLiveData } from "./contexts/LiveDataContext";
+import { AuthProvider, useAuth } from "./contexts/AuthContext";
+import { LoginPage } from "./components/LoginPage";
+import { Train } from "lucide-react";
 import { motion, AnimatePresence } from "motion/react";
 import { Language, translations } from "./lib/translations";
 
-export default function App() {
+function AppContent() {
   // Navigation & View States
   const [activeTab, setActiveTab] = useState<NavTab>("corridors");
   const [activeDept, setActiveDept] = useState<DepartmentCode>("SMMS");
@@ -31,6 +37,7 @@ export default function App() {
   const [isEmergencyModalOpen, setIsEmergencyModalOpen] = useState(false);
   const [isWorkOrderModalOpen, setIsWorkOrderModalOpen] = useState(false);
   const [isAIModalOpen, setIsAIModalOpen] = useState(false);
+  const [isDispatchAdvisoryModalOpen, setIsDispatchAdvisoryModalOpen] = useState(false);
   const [isNotificationsModalOpen, setIsNotificationsModalOpen] = useState(false);
   const [isSettingsModalOpen, setIsSettingsModalOpen] = useState(false);
   const [isProfileModalOpen, setIsProfileModalOpen] = useState(false);
@@ -40,78 +47,33 @@ export default function App() {
   const [selectedAssetForCad, setSelectedAssetForCad] = useState<string | null>("TRK-01");
   const [selectedAssetForWorkOrder, setSelectedAssetForWorkOrder] = useState<string | null>("SIG-44B1");
 
-  // Dynamic Train Schedules State (Strictly Maintaining 5 Trains Allocation as Requested)
-  const [trains, setTrains] = useState<any[]>([
-    { id: "R-104", train_number: "12301", name: "Rajdhani Express", cat: "RAJDHANI", route: "NDLS → MMCT", arr: "14:30", dep: "14:45", priority: "P1 - Critical", status: "On Time", statusColor: "text-blue-600" },
-    { id: "F-882", train_number: "58201", name: "Heavy Goods Freight", cat: "FREIGHT", route: "HWH → BSL", arr: "15:10", dep: "--:--", priority: "P3 - Standard", status: "Conflict", statusColor: "text-rose-600" },
-    { id: "E-210", train_number: "12123", name: "Deccan Queen Express", cat: "RAJDHANI", route: "PUNE → CSMT", arr: "15:45", dep: "15:50", priority: "P2 - Elevated", status: "On Time", statusColor: "text-blue-600" },
-    { id: "R-106", train_number: "20901", name: "Vande Bharat Express", cat: "RAJDHANI", route: "SBC → NDLS", arr: "16:20", dep: "16:35", priority: "P1 - Critical", status: "Delayed +15m", statusColor: "text-amber-600" },
-    { id: "S-405", train_number: "12004", name: "Shatabdi Express", cat: "RAJDHANI", route: "CNB → LKO", arr: "17:05", dep: "17:15", priority: "P2 - High Priority", status: "On Time", statusColor: "text-blue-600" },
-  ]);
+  // Shared Live Operational State & Controller from LiveDataContext
+  const { trains, controlState, handleControlAction, refreshNow } = useLiveData();
 
   // Dynamic Work Orders State
-  const [workOrders, setWorkOrders] = useState<any[]>([
-    {
-      id: 101,
-      assetId: "SIG-44B1",
-      department: "SMMS",
-      urgency: "HIGH",
-      duration: 90,
-      status: "PENDING",
-      notes: "Replace degraded point circuit breaker and re-align telemetry packet transmitter.",
-      created_at: "Today 04:15"
-    },
-    {
-      id: 102,
-      assetId: "TRK-01",
-      department: "TMS",
-      urgency: "HIGH",
-      duration: 120,
-      status: "BUNDLED",
-      notes: "Acoustic micro-crack vibration detected on UP Main line weld joint.",
-      created_at: "Today 02:30"
+  const [workOrders, setWorkOrders] = useState<any[]>([]);
+
+  // Fetch live work orders from authoritative backend
+  const fetchWorkOrders = React.useCallback(async () => {
+    try {
+      const res = await fetch("/api/v1/work-orders");
+      if (res.ok) {
+        const data = await res.json();
+        if (Array.isArray(data)) {
+          setWorkOrders(data);
+        }
+      }
+    } catch (err) {
+      console.warn("Failed to fetch live work orders:", err);
     }
-  ]);
+  }, []);
+
+  React.useEffect(() => {
+    fetchWorkOrders();
+  }, [fetchWorkOrders]);
 
   // Notifications State
-  const [notifications, setNotifications] = useState<NotificationItem[]>([
-    {
-      id: "notif-1",
-      title: "Thermite Weld Stress Warning",
-      message: "Sensor TRK-01 (KM 4.2) detected micro-fracture acoustic frequency. Speed restricted to 30 km/h.",
-      timestamp: "2m ago",
-      type: "critical",
-      sector: "TRK-01 / NEC-11",
-      read: false
-    },
-    {
-      id: "notif-2",
-      title: "Point Machine 44B Lubrication Due",
-      message: "SMMS diagnostics suggest bundling with upcoming Track Machine (TMS) block at 14:30.",
-      timestamp: "12m ago",
-      type: "warning",
-      sector: "SIG-44B1",
-      read: false
-    },
-    {
-      id: "notif-3",
-      title: "Rajdhani Express (12301) Green Wave Clear",
-      message: "Automated route locked through Ghaziabad Junction with 15-minute headway buffer.",
-      timestamp: "24m ago",
-      type: "info",
-      sector: "GZB Interlocking",
-      read: true
-    },
-    {
-      id: "notif-4",
-      title: "OHE Substation 02 Normalization",
-      message: "Traction voltage steady at 25.4 kV across Kanpur - Prayagraj Trunk corridor.",
-      timestamp: "45m ago",
-      type: "success",
-      sector: "TDMS / Sub-02",
-      read: true
-    }
-  ]);
+  const [notifications, setNotifications] = useState<NotificationItem[]>([]);
 
   // System Settings State
   const [settings, setSettings] = useState<AppSettingsState>({
@@ -123,16 +85,17 @@ export default function App() {
     showHudTelemetry: true,
     autoConflictDetection: true,
     safetyBufferMinutes: 15,
-    stationId: "IR-NDLS-04",
+    stationId: "MAS-SR-01",
     autoScrollTimetable: true
   });
 
   // Operator Profile State
+  const { user, hasPermission } = useAuth();
   const [profile, setProfile] = useState<OperatorProfile>({
-    name: "Sarah Chen",
+    name: "R. Subramanian",
     role: "Chief Corridor Controller",
-    consoleId: "IR-NDLS-04",
-    sectorDivision: "North Central Division - New Delhi Trunk",
+    consoleId: "MAS-SR-01",
+    sectorDivision: "Chennai Division - Southern Railway (MAS-TRL Corridor)",
     badgeLevel: "Tier 1 Master Dispatcher",
     shift: "Shift B (14:00 - 22:00)",
     shiftStartTime: "14:00",
@@ -144,15 +107,50 @@ export default function App() {
     status: "ACTIVE"
   });
 
+  // Synchronize authenticated user profile with system profile state
+  React.useEffect(() => {
+    if (user) {
+      setProfile((prev) => ({
+        ...prev,
+        name: user.name,
+        role: user.designation || user.role,
+        consoleId: user.console_id,
+        sectorDivision: `${user.department_name} (MAS-TRL Corridor)`,
+        badgeLevel: user.badge_level,
+        shift: user.shift || prev.shift,
+      }));
+
+      // Set default department view according to user role
+      if (user.role === "ENGINEERING") {
+        setActiveDept("TMS");
+      } else if (user.role === "TRACTION") {
+        setActiveDept("TDMS");
+      } else if (user.role === "SIGNAL_TELECOM") {
+        setActiveDept("SMMS");
+      }
+    }
+  }, [user]);
+
+  // Guard active tab against role permission revocations
+  React.useEffect(() => {
+    const permMap: Partial<Record<NavTab, string>> = {
+      network: "VIEW_LIVE_OPERATIONS",
+      corridors: "VIEW_CORRIDOR",
+      prioritization: "VIEW_PRIORITIZATION",
+      ml_intelligence: "VIEW_ML_INTELLIGENCE",
+      schedules: "VIEW_SCHEDULES",
+      assets: "VIEW_ALL_REQUESTS",
+      analytics: "VIEW_ANALYTICS",
+    };
+    const requiredPerm = permMap[activeTab];
+    if (requiredPerm && !hasPermission(requiredPerm)) {
+      setActiveTab("corridors");
+    }
+  }, [activeTab, hasPermission]);
+
   // AI Insights State
   const [geminiLoading, setGeminiLoading] = useState(false);
-  const [geminiInsights, setGeminiInsights] = useState<string>(
-    `### 🚄 Corridor Safety & Dispatch Audit (NDLS - CNB High-Density Trunk)
-- **High-Risk Critical Asset Alert**: Asset **TRK-01** (KM 4.2) requires immediate containment (Thermite weld fracture detected).
-- **Traffic Isolation Buffer**: Minimum 15-minute safety envelope enforced ahead of **NDLS-HWH Rajdhani Express (12301)**.
-- **Cross-Department Bundling Yield**: Co-locating Track (TMS), Signal (SMMS), and Traction (TDMS) maintenance saves **3.5 corridor block-hours**, mitigating cascading downstream delays across Kanpur Outer.
-- **Controller Action Directive**: Approve proposed **BLOCK 2001** to authorize simultaneous track clamp installation and point machine lubrication.`
-  );
+  const [geminiInsights, setGeminiInsights] = useState<string>("");
 
   // Mobile sidebar drawer state
   const [isMobileSidebarOpen, setIsMobileSidebarOpen] = useState<boolean>(false);
@@ -174,9 +172,12 @@ export default function App() {
     setGeminiLoading(true);
     try {
       const res = await fetch("/api/v1/gemini/insights", { method: "POST" });
-      const data = await res.json();
-      if (data && data.analysis) {
-        setGeminiInsights(data.analysis);
+      const contentType = res.headers.get("content-type");
+      if (res.ok && contentType && contentType.includes("application/json")) {
+        const data = await res.json();
+        if (data && data.analysis) {
+          setGeminiInsights(data.analysis);
+        }
       }
     } catch (err) {
       console.error(err);
@@ -206,6 +207,7 @@ export default function App() {
         onProfileClick={() => setIsProfileModalOpen(true)}
         onDataPipelineClick={() => setIsDataPipelineModalOpen(true)}
         onSafetyGuardrailClick={() => setIsSafetyModalOpen(true)}
+        onOpenAdvisoryModal={() => setIsDispatchAdvisoryModalOpen(true)}
         unreadAlertsCount={unreadAlertsCount}
       />
 
@@ -266,7 +268,11 @@ export default function App() {
                 transition={{ duration: 0.18 }}
                 className="flex-1 flex flex-col"
               >
-                <NetworkView lang={lang} />
+                <NetworkView 
+                  lang={lang} 
+                  onOpenEmergencyModal={() => setIsEmergencyModalOpen(true)}
+                  onOpenAdvisoryModal={() => setIsDispatchAdvisoryModalOpen(true)}
+                />
               </motion.div>
             )}
 
@@ -370,7 +376,7 @@ export default function App() {
         <div className="flex items-center space-x-4 text-[10px] text-slate-400 font-mono">
           <span>{translations[lang]?.securityLevel || "Security Level"}: <strong className="text-emerald-400 font-bold">NIC-RESTRICTED</strong></span>
           <span>•</span>
-          <span>{translations[lang]?.consoleId || "CTC Console ID"}: <strong className="text-amber-400 font-bold">IR-NDLS-04</strong></span>
+          <span>{translations[lang]?.consoleId || "CTC Console ID"}: <strong className="text-amber-400 font-bold">MAS-SR-01</strong></span>
           <span>•</span>
           <span className="text-slate-500">{translations[lang]?.copyright || "© 2026 Indian Railways"}</span>
         </div>
@@ -380,16 +386,29 @@ export default function App() {
       <EmergencyModal
         isOpen={isEmergencyModalOpen}
         onClose={() => setIsEmergencyModalOpen(false)}
-        onConfirm={() => {
-          console.log("Emergency stop broadcasted");
+        onEmergencyHaltIssued={(data) => {
           setNotifications(prev => [
             {
               id: `alert-emerg-${Date.now()}`,
-              title: "EMERGENCY HALT BROADCAST ISSUED",
-              message: "Sector Dispatcher initiated immediate red aspect across all active blocks.",
+              title: `EMERGENCY HALT BROADCAST: ${data.affected_block_id || "CORRIDOR"}`,
+              message: `Red aspect transmitted to ${data.affected_block_id}. Reason: ${data.emergency_type} (${data.department}).`,
               timestamp: "Just now",
               type: "critical",
-              sector: "ALL SECTORS",
+              sector: data.affected_block_id || "ALL",
+              read: false
+            },
+            ...prev
+          ]);
+        }}
+        onEmergencyResolved={() => {
+          setNotifications(prev => [
+            {
+              id: `alert-resolve-${Date.now()}`,
+              title: "EMERGENCY CLEARED & SIGNALS RESTORED",
+              message: "Corridor blocks restored to normal aspect signals and automatic dispatch.",
+              timestamp: "Just now",
+              type: "success",
+              sector: "CORRIDOR",
               read: false
             },
             ...prev
@@ -401,63 +420,18 @@ export default function App() {
         isOpen={isWorkOrderModalOpen}
         assetId={selectedAssetForWorkOrder}
         onClose={() => setIsWorkOrderModalOpen(false)}
-        onSubmit={(data) => {
-          const newWO = {
-            id: Math.floor(1000 + Math.random() * 9000),
-            assetId: data.assetId || selectedAssetForWorkOrder || "SIG-44B1",
-            department: data.department || "SMMS",
-            urgency: data.urgency || "HIGH",
-            duration: data.duration || 90,
-            status: "PENDING",
-            notes: data.notes || "Point switch repair and telemetry alignment.",
-            created_at: "Just now"
-          };
-
-          setWorkOrders(prev => [newWO, ...prev]);
-
-          // Post to backend API
-          const dept = (data.department || "TMS").toLowerCase();
-          let payload: any = {};
-          if (dept === "tms") {
-            payload = {
-              trackCode: newWO.assetId,
-              defectId: `DEF-${Date.now().toString().slice(-4)}`,
-              severityRank: data.urgency === "HIGH" ? 5 : data.urgency === "MEDIUM" ? 3 : 1,
-              inspectorNotes: data.notes,
-              requiredRepairDuration: Number(data.duration) || 90
-            };
-          } else if (dept === "smms") {
-            payload = {
-              signalPostId: newWO.assetId,
-              faultType: data.notes || "Signal interlocking telemetry fail",
-              criticalityFlag: data.urgency || "HIGH",
-              repairTimeEst: Number(data.duration) || 90
-            };
-          } else {
-            payload = {
-              sectionId: newWO.assetId,
-              oheDefectType: data.notes || "OHE tension drop wear",
-              tensionDropPercentage: 18,
-              durationNeeded: Number(data.duration) || 90
-            };
-          }
-
-          fetch(`/api/v1/ingest/${dept}`, {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify(payload)
-          }).then(() => {
-            fetch("/api/v1/optimize/generate-plan", { method: "POST" });
-          }).catch(err => console.error("Work Order Ingest Error:", err));
-
+        onSuccess={() => {
+          // Re-fetch authoritative work orders list from backend
+          fetchWorkOrders();
+          fetch("/api/v1/optimize/generate-plan", { method: "POST" }).catch(() => {});
           setNotifications(prev => [
             {
               id: `alert-wo-${Date.now()}`,
-              title: `Work Order Enqueued: #${newWO.id} (${newWO.assetId})`,
-              message: `Dept: ${newWO.department} | Urgency: ${newWO.urgency} | Duration: ${newWO.duration} mins`,
+              title: `Work Order Created Successfully`,
+              message: `Maintenance request recorded in authoritative repository.`,
               timestamp: "Just now",
-              type: "info",
-              sector: newWO.department || "TMS",
+              type: "success",
+              sector: "MAINTENANCE",
               read: false
             },
             ...prev
@@ -471,6 +445,28 @@ export default function App() {
         insights={geminiInsights}
         onRefresh={handleFetchInsights}
         loading={geminiLoading}
+      />
+
+      {/* Operational Dispatch Advisory Modal */}
+      <DispatchAdvisoryModal
+        isOpen={isDispatchAdvisoryModalOpen}
+        onClose={() => setIsDispatchAdvisoryModalOpen(false)}
+        onAdvisoryApplied={(appliedAdv) => {
+          refreshNow();
+          fetchWorkOrders();
+          setNotifications(prev => [
+            {
+              id: `alert-adv-${Date.now()}`,
+              title: `Advisory Action Applied: ${appliedAdv.action_label || appliedAdv.action_type}`,
+              message: appliedAdv.recommended_action,
+              timestamp: "Just now",
+              type: "success",
+              sector: appliedAdv.affected_section,
+              read: false
+            },
+            ...prev
+          ]);
+        }}
       />
 
       {/* Live Telemetry & Dispatch Alerts Modal */}
@@ -544,5 +540,44 @@ export default function App() {
       />
 
     </div>
+  );
+}
+
+function AppRoot() {
+  const { isAuthenticated, isLoading } = useAuth();
+
+  if (isLoading) {
+    return (
+      <div className="min-h-screen bg-slate-950 flex flex-col items-center justify-center text-slate-100 font-sans select-none">
+        <div className="w-16 h-16 rounded-2xl bg-gradient-to-tr from-blue-600 to-indigo-700 flex items-center justify-center mb-4 shadow-2xl border border-blue-400/30">
+          <Train className="w-9 h-9 text-white animate-pulse" />
+        </div>
+        <div className="text-base font-bold tracking-tight text-white mb-1 font-serif">
+          RailSync Enterprise
+        </div>
+        <div className="text-xs text-slate-400 font-mono flex items-center gap-2">
+          <div className="w-2 h-2 rounded-full bg-blue-500 animate-ping" />
+          <span>Validating CRIS Railway Security Clearance...</span>
+        </div>
+      </div>
+    );
+  }
+
+  if (!isAuthenticated) {
+    return <LoginPage />;
+  }
+
+  return (
+    <LiveDataProvider>
+      <AppContent />
+    </LiveDataProvider>
+  );
+}
+
+export default function App() {
+  return (
+    <AuthProvider>
+      <AppRoot />
+    </AuthProvider>
   );
 }

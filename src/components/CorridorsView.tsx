@@ -24,6 +24,7 @@ import {
 import { motion, AnimatePresence } from "motion/react";
 
 import { Language, translations } from "../lib/translations";
+import { useLiveData } from "../contexts/LiveDataContext";
 
 interface CorridorsViewProps {
   workOrders?: any[];
@@ -47,6 +48,12 @@ export const CorridorsView: React.FC<CorridorsViewProps> = ({
   onOpenWorkOrder
 }) => {
   const t = translations[lang] || translations.EN;
+  const { corridorData, trains: liveTrains } = useLiveData();
+  const effectiveTrains = trains && trains.length > 0 ? trains : (liveTrains || corridorData?.active_trains || []);
+  const activeEmergencyCount = corridorData?.active_emergency_count || 0;
+  const emergencyClosures = corridorData?.emergency_closures || [];
+  const corridorBlocks = corridorData?.blocks || [];
+
   const [activeModalBlock, setActiveModalBlock] = useState<any | null>(null);
   const [isPlaying, setIsPlaying] = useState<boolean>(true);
   const [simSpeed, setSimSpeed] = useState<number>(1);
@@ -82,7 +89,7 @@ export const CorridorsView: React.FC<CorridorsViewProps> = ({
         }
       }
     } catch (err) {
-      console.error("Failed to fetch corridor state:", err);
+      console.warn("Transient issue fetching corridor state:", err);
     }
   };
 
@@ -464,20 +471,30 @@ export const CorridorsView: React.FC<CorridorsViewProps> = ({
           {/* Card 3: Critical Alerts */}
           <motion.div 
             whileHover={{ y: -2 }}
-            className="glass-panel-alert rounded-2xl p-4 cursor-pointer"
+            className={`rounded-2xl p-4 cursor-pointer border ${
+              activeEmergencyCount > 0 
+                ? "glass-panel-alert border-rose-300 bg-rose-50/50" 
+                : "glass-panel border-slate-200"
+            }`}
             onClick={onOpenDefectModal}
           >
-            <div className="flex items-center justify-between text-[11px] font-bold uppercase tracking-wider text-rose-600 mb-2">
+            <div className={`flex items-center justify-between text-[11px] font-bold uppercase tracking-wider mb-2 ${
+              activeEmergencyCount > 0 ? "text-rose-600" : "text-emerald-700"
+            }`}>
               <div className="flex items-center space-x-1.5">
-                <span className="w-2 h-2 rounded-full bg-rose-500 animate-ping"></span>
+                <span className={`w-2 h-2 rounded-full ${
+                  activeEmergencyCount > 0 ? "bg-rose-500 animate-ping" : "bg-emerald-500"
+                }`}></span>
                 <span>Critical Alerts</span>
               </div>
-              <AlertTriangle className="w-3.5 h-3.5 text-rose-500" />
+              <AlertTriangle className={`w-3.5 h-3.5 ${activeEmergencyCount > 0 ? "text-rose-500" : "text-emerald-600"}`} />
             </div>
-            <div className="text-3xl font-black text-slate-900">1 Incident</div>
-            <div className="text-[10px] font-bold text-rose-700 tracking-wider uppercase mt-2 flex items-center justify-between">
-              <span>TRK-9 Signal Failure</span>
-              <span className="underline text-rose-900 font-mono">INSPECT →</span>
+            <div className="text-3xl font-black text-slate-900">
+              {activeEmergencyCount} {activeEmergencyCount === 1 ? "Incident" : "Incidents"}
+            </div>
+            <div className="text-[10px] font-bold text-slate-700 tracking-wider uppercase mt-2 flex items-center justify-between">
+              <span>{emergencyClosures[0]?.reason || (activeEmergencyCount > 0 ? "Emergency Lockout" : "Corridor Clear")}</span>
+              <span className="underline text-blue-900 font-mono">INSPECT →</span>
             </div>
           </motion.div>
 
@@ -488,58 +505,40 @@ export const CorridorsView: React.FC<CorridorsViewProps> = ({
               <Radio className="w-3.5 h-3.5 text-blue-600 animate-pulse" />
             </div>
             <div className="space-y-2.5">
-              
-              {/* Consist 1 */}
-              <motion.div 
-                whileHover={{ scale: 1.02, x: 2 }}
-                onClick={() => setActiveModalBlock({ title: "EXP-402 (BOS-NYP)", type: "HIGH-SPEED PASSENGER", status: "ON TIME", duration: "90 min", speed: "160 km/h", pax: "420" })}
-                className="bg-slate-50 border border-slate-200 rounded-xl p-3 hover:border-blue-300 hover:bg-blue-50/40 transition cursor-pointer"
-              >
-                <div className="flex items-center justify-between">
-                  <div>
-                    <span className="text-xs font-black text-slate-900 block">EXP-402</span>
-                    <span className="text-[10px] text-slate-500 font-mono">BOS → NYP • 160km/h</span>
-                  </div>
-                  <span className="text-[9px] font-black bg-blue-50 text-blue-700 px-2 py-0.5 rounded-md border border-blue-200">
-                    ON TIME
-                  </span>
+              {effectiveTrains.length === 0 ? (
+                <div className="text-[11px] text-slate-400 font-mono py-4 text-center">
+                  No active train consists on corridor.
                 </div>
-              </motion.div>
-
-              {/* Consist 2 */}
-              <motion.div 
-                whileHover={{ scale: 1.02, x: 2 }}
-                onClick={() => setActiveModalBlock({ title: "FRT-991", type: "CONTAINER FREIGHT", status: "DELAY +5M", duration: "75 min", speed: "75 km/h", tonnage: "3,200T" })}
-                className="bg-slate-50 border border-slate-200 rounded-xl p-3 hover:border-amber-300 hover:bg-amber-50/40 transition cursor-pointer"
-              >
-                <div className="flex items-center justify-between">
-                  <div>
-                    <span className="text-xs font-black text-slate-900 block">FRT-991</span>
-                    <span className="text-[10px] text-slate-500 font-mono">PHL → BAL • 3,200T</span>
-                  </div>
-                  <span className="text-[9px] font-black bg-amber-50 text-amber-700 px-2 py-0.5 rounded-md border border-amber-200">
-                    DELAY +5M
-                  </span>
-                </div>
-              </motion.div>
-
-              {/* Consist 3 */}
-              <motion.div 
-                whileHover={{ scale: 1.02, x: 2 }}
-                onClick={() => setActiveModalBlock({ title: "LCL-112", type: "COMMUTER REGIONAL", status: "ON TIME", duration: "60 min", speed: "110 km/h", pax: "310" })}
-                className="bg-slate-50 border border-slate-200 rounded-xl p-3 hover:border-blue-300 hover:bg-blue-50/40 transition cursor-pointer"
-              >
-                <div className="flex items-center justify-between">
-                  <div>
-                    <span className="text-xs font-black text-slate-900 block">LCL-112</span>
-                    <span className="text-[10px] text-slate-500 font-mono">WAS → PHL • 110km/h</span>
-                  </div>
-                  <span className="text-[9px] font-black bg-blue-50 text-blue-700 px-2 py-0.5 rounded-md border border-blue-200">
-                    ON TIME
-                  </span>
-                </div>
-              </motion.div>
-
+              ) : (
+                effectiveTrains.slice(0, 4).map((train: any) => (
+                  <motion.div 
+                    key={train.train_number || train.trainNumber || train.id}
+                    whileHover={{ scale: 1.02, x: 2 }}
+                    onClick={() => setActiveModalBlock({ 
+                      title: `${train.train_number || train.trainNumber} - ${train.train_name || train.trainName}`, 
+                      type: train.type || "PASSENGER EXPRESS", 
+                      status: (train.delay_minutes || train.delay || 0) > 0 ? `DELAY +${train.delay_minutes || train.delay}M` : "ON TIME", 
+                      speed: `${train.speed_kmh || train.speed || 0} km/h`, 
+                      route: `${train.source} → ${train.destination}` 
+                    })}
+                    className="bg-slate-50 border border-slate-200 rounded-xl p-3 hover:border-blue-300 hover:bg-blue-50/40 transition cursor-pointer"
+                  >
+                    <div className="flex items-center justify-between">
+                      <div>
+                        <span className="text-xs font-black text-slate-900 block">{train.train_number || train.trainNumber}</span>
+                        <span className="text-[10px] text-slate-500 font-mono">{train.source} → {train.destination} • {train.speed_kmh || train.speed || 0}km/h</span>
+                      </div>
+                      <span className={`text-[9px] font-black px-2 py-0.5 rounded-md border ${
+                        (train.delay_minutes || train.delay || 0) > 0 
+                          ? "bg-amber-50 text-amber-700 border-amber-200" 
+                          : "bg-blue-50 text-blue-700 border-blue-200"
+                      }`}>
+                        {(train.delay_minutes || train.delay || 0) > 0 ? `+${train.delay_minutes || train.delay}M` : "ON TIME"}
+                      </span>
+                    </div>
+                  </motion.div>
+                ))
+              )}
             </div>
           </div>
 
@@ -579,109 +578,148 @@ export const CorridorsView: React.FC<CorridorsViewProps> = ({
                 ))}
               </div>
 
-              {/* TRACK ROW 1: TRK-1 (N) */}
+              {/* TRACK ROW 1: TRK-1 UP Main Line */}
               <div className="grid grid-cols-[110px_1fr] items-center min-h-[56px] relative z-10 group">
                 <div className="text-xs font-black text-slate-800 pl-2 flex items-center space-x-1.5">
                   <span className="w-2 h-2 rounded-full bg-blue-500"></span>
-                  <span>TRK-1 (N)</span>
+                  <span>TRK-1 (UP)</span>
                 </div>
                 <div className="relative h-11 w-full">
-                  {/* EXP-402 block */}
-                  <motion.div 
-                    whileHover={{ scale: 1.02, y: -2, boxShadow: "0 4px 12px rgba(37, 99, 235, 0.25)" }}
-                    whileTap={{ scale: 0.98 }}
-                    className="absolute top-1 bottom-1 bg-gradient-to-r from-blue-600 to-blue-500 border border-blue-400 rounded-xl px-3 flex items-center justify-between text-xs font-bold text-white shadow-sm cursor-pointer"
-                    style={{ left: "8%", width: "26%" }}
-                    onClick={() => setActiveModalBlock({ title: "EXP-402 (BOS-NYP)", type: "HIGH-SPEED PASSENGER", status: "ON TIME", duration: "90 min", speed: "160 km/h", route: "Boston South → New York Penn", traction: "25kV AC" })}
-                    onMouseEnter={() => setHoveredTrain("EXP-402")}
-                    onMouseLeave={() => setHoveredTrain(null)}
-                  >
-                    <span className="truncate flex items-center space-x-1.5">
-                      <span className="w-1.5 h-1.5 rounded-full bg-white animate-pulse"></span>
-                      <span>EXP-402 (BOS-NYP)</span>
-                    </span>
-                    <span className="text-[9px] font-mono text-blue-100 ml-1">160 km/h</span>
-                  </motion.div>
+                  {effectiveTrains.slice(0, 2).map((tr: any, idx: number) => {
+                    const leftVal = idx === 0 ? "8%" : "54%";
+                    const widthVal = "30%";
+                    return (
+                      <motion.div 
+                        key={tr.train_number || idx}
+                        whileHover={{ scale: 1.02, y: -2, boxShadow: "0 4px 12px rgba(37, 99, 235, 0.25)" }}
+                        whileTap={{ scale: 0.98 }}
+                        className="absolute top-1 bottom-1 bg-gradient-to-r from-blue-600 to-blue-500 border border-blue-400 rounded-xl px-3 flex items-center justify-between text-xs font-bold text-white shadow-sm cursor-pointer"
+                        style={{ left: leftVal, width: widthVal }}
+                        onClick={() => setActiveModalBlock({ 
+                          title: `${tr.train_number} (${tr.source}-${tr.destination})`, 
+                          type: tr.type || "HIGH-SPEED PASSENGER", 
+                          status: (tr.delay_minutes || 0) > 0 ? `DELAY +${tr.delay_minutes}m` : "ON TIME", 
+                          duration: "90 min", 
+                          speed: `${tr.speed_kmh || 0} km/h`, 
+                          route: `${tr.source} → ${tr.destination}`, 
+                          traction: "25kV AC" 
+                        })}
+                        onMouseEnter={() => setHoveredTrain(tr.train_number)}
+                        onMouseLeave={() => setHoveredTrain(null)}
+                      >
+                        <span className="truncate flex items-center space-x-1.5">
+                          <span className="w-1.5 h-1.5 rounded-full bg-white animate-pulse"></span>
+                          <span>{tr.train_number} ({tr.source}-{tr.destination})</span>
+                        </span>
+                        <span className="text-[9px] font-mono text-blue-100 ml-1">{tr.speed_kmh || 0} km/h</span>
+                      </motion.div>
+                    );
+                  })}
                 </div>
               </div>
 
-              {/* TRACK ROW 2: TRK-2 (S) */}
-              <div className="grid grid-cols-[110px_1fr] items-center min-h-[56px] relative z-10 group">
-                <div className="text-xs font-black text-slate-800 pl-2 flex items-center space-x-1.5">
-                  <span className="w-2 h-2 rounded-full bg-amber-500"></span>
-                  <span>TRK-2 (S)</span>
-                </div>
-                <div className="relative h-11 w-full">
-                  {/* TRACK MAINT M-44 (Striped maintenance block) */}
-                  <motion.div 
-                    whileHover={{ scale: 1.02, y: -2, boxShadow: "0 4px 12px rgba(245, 158, 11, 0.25)" }}
-                    whileTap={{ scale: 0.98 }}
-                    className="absolute top-1 bottom-1 maint-striped border-2 border-amber-400 rounded-xl px-3 flex items-center text-xs font-black text-amber-900 shadow-sm cursor-pointer space-x-1.5"
-                    style={{ left: "38%", width: "36%" }}
-                    onClick={() => setActiveModalBlock({ title: "TRACK MAINT M-44", type: "CORRIDOR MAINTENANCE", status: "IN PROGRESS", duration: "120 min", details: "Track weld ultrasonic inspection & tamp alignment", crew: "TMS Unit 7 (4 Engineers)" })}
-                  >
-                    <Wrench className="w-4 h-4 shrink-0 text-amber-700 animate-spin" style={{ animationDuration: "12s" }} />
-                    <span className="truncate">TRACK MAINT M-44 (TMS + SMMS)</span>
-                  </motion.div>
-                </div>
-              </div>
-
-              {/* TRACK ROW 3: TRK-3 (L) */}
+              {/* TRACK ROW 2: TRK-2 DOWN Main Line */}
               <div className="grid grid-cols-[110px_1fr] items-center min-h-[56px] relative z-10 group">
                 <div className="text-xs font-black text-slate-800 pl-2 flex items-center space-x-1.5">
                   <span className="w-2 h-2 rounded-full bg-sky-500"></span>
-                  <span>TRK-3 (L)</span>
+                  <span>TRK-2 (DN)</span>
                 </div>
                 <div className="relative h-11 w-full">
-                  {/* LCL-112 block */}
-                  <motion.div 
-                    whileHover={{ scale: 1.02, y: -2, boxShadow: "0 4px 12px rgba(14, 165, 233, 0.25)" }}
-                    whileTap={{ scale: 0.98 }}
-                    className="absolute top-1 bottom-1 bg-sky-50 border border-sky-300 rounded-xl px-3 flex items-center justify-between text-xs font-bold text-sky-800 shadow-sm cursor-pointer"
-                    style={{ left: "4%", width: "18%" }}
-                    onClick={() => setActiveModalBlock({ title: "LCL-112", type: "COMMUTER REGIONAL", status: "ON TIME", duration: "60 min", speed: "110 km/h" })}
-                  >
-                    <span className="truncate">LCL-112</span>
-                    <span className="text-[9px] font-mono text-sky-600">11:00</span>
-                  </motion.div>
-
-                  {/* FRT-991 block */}
-                  <motion.div 
-                    whileHover={{ scale: 1.02, y: -2, boxShadow: "0 4px 12px rgba(245, 158, 11, 0.25)" }}
-                    whileTap={{ scale: 0.98 }}
-                    className="absolute top-1 bottom-1 bg-amber-50 border border-amber-300 rounded-xl px-3 flex items-center justify-between text-xs font-bold text-amber-800 shadow-sm cursor-pointer"
-                    style={{ left: "56%", width: "23%" }}
-                    onClick={() => setActiveModalBlock({ title: "FRT-991", type: "HEAVY FREIGHT", status: "DELAY +5M", duration: "75 min", speed: "75 km/h" })}
-                  >
-                    <span className="truncate">FRT-991</span>
-                    <span className="text-[9px] font-mono text-amber-600">+5m</span>
-                  </motion.div>
+                  {effectiveTrains.slice(2, 4).map((tr: any, idx: number) => {
+                    const leftVal = idx === 0 ? "14%" : "60%";
+                    const widthVal = "28%";
+                    return (
+                      <motion.div 
+                        key={tr.train_number || idx}
+                        whileHover={{ scale: 1.02, y: -2, boxShadow: "0 4px 12px rgba(14, 165, 233, 0.25)" }}
+                        whileTap={{ scale: 0.98 }}
+                        className="absolute top-1 bottom-1 bg-sky-50 border border-sky-300 rounded-xl px-3 flex items-center justify-between text-xs font-bold text-sky-800 shadow-sm cursor-pointer"
+                        style={{ left: leftVal, width: widthVal }}
+                        onClick={() => setActiveModalBlock({ 
+                          title: `${tr.train_number}`, 
+                          type: "EXPRESS SERVICE", 
+                          status: (tr.delay_minutes || 0) > 0 ? `+${tr.delay_minutes}m` : "ON TIME", 
+                          duration: "60 min", 
+                          speed: `${tr.speed_kmh || 0} km/h` 
+                        })}
+                      >
+                        <span className="truncate">{tr.train_number} - {tr.train_name}</span>
+                        <span className="text-[9px] font-mono text-sky-600">{tr.speed_kmh || 0} km/h</span>
+                      </motion.div>
+                    );
+                  })}
                 </div>
               </div>
 
-              {/* TRACK ROW 4: TRK-9 (Y) */}
+              {/* TRACK ROW 3: TRK-3 Maintenance Bundles */}
               <div className="grid grid-cols-[110px_1fr] items-center min-h-[56px] relative z-10 group">
-                <div className="text-xs font-black text-rose-600 pl-2 flex items-center space-x-1.5">
-                  <span className="w-2 h-2 rounded-full bg-rose-500 animate-ping"></span>
-                  <span>TRK-9 (Y)</span>
+                <div className="text-xs font-black text-slate-800 pl-2 flex items-center space-x-1.5">
+                  <span className="w-2 h-2 rounded-full bg-amber-500"></span>
+                  <span>TRK-3 (MNT)</span>
                 </div>
                 <div className="relative h-11 w-full">
-                  {/* SIG FAIL red alert block */}
-                  <motion.div 
-                    whileHover={{ scale: 1.02, y: -2, boxShadow: "0 4px 12px rgba(239, 68, 68, 0.25)" }}
-                    whileTap={{ scale: 0.98 }}
-                    className="absolute top-1 bottom-1 bg-rose-50 border-2 border-rose-400 rounded-xl px-3 flex items-center justify-between text-xs font-black text-rose-800 shadow-sm cursor-pointer space-x-1.5"
-                    style={{ left: "19%", width: "16%" }}
-                    onClick={() => setActiveModalBlock({ title: "SIG FAIL (TRK-9)", type: "CRITICAL INCIDENT", status: "RED ASPECT LOCKED", duration: "Active 24m", details: "Point interlocking switch telemetry drop - SMMS work order enqueued", location: "Sector 7 Interlocking" })}
-                  >
-                    <div className="flex items-center space-x-1.5 truncate">
-                      <AlertTriangle className="w-4 h-4 shrink-0 text-rose-600 animate-bounce" />
-                      <span className="truncate">SIG FAIL</span>
+                  {workOrders.length > 0 || optimizedBlocks.length > 0 ? (
+                    <motion.div 
+                      whileHover={{ scale: 1.02, y: -2, boxShadow: "0 4px 12px rgba(245, 158, 11, 0.25)" }}
+                      whileTap={{ scale: 0.98 }}
+                      className="absolute top-1 bottom-1 maint-striped border-2 border-amber-400 rounded-xl px-3 flex items-center text-xs font-black text-amber-900 shadow-sm cursor-pointer space-x-1.5"
+                      style={{ left: "32%", width: "42%" }}
+                      onClick={() => setActiveModalBlock({ 
+                        title: workOrders[0]?.title || "TRACK MAINTENANCE POSSESSION", 
+                        type: "CORRIDOR MAINTENANCE", 
+                        status: "SCHEDULED", 
+                        duration: `${workOrders[0]?.estimatedDurationHours || 2}h`, 
+                        details: workOrders[0]?.description || "Scheduled ultrasonic rail inspection & tamping", 
+                        crew: workOrders[0]?.crewLeader || "TMS Mobile Unit" 
+                      })}
+                    >
+                      <Wrench className="w-4 h-4 shrink-0 text-amber-700 animate-spin" style={{ animationDuration: "12s" }} />
+                      <span className="truncate">
+                        {workOrders[0]?.title || `MAINT BUNDLE (${optimizedBlocks.length} BLOCKS)`}
+                      </span>
+                    </motion.div>
+                  ) : (
+                    <div className="text-xs text-slate-400 font-mono pl-3 pt-3">No active maintenance possessions scheduled</div>
+                  )}
+                </div>
+              </div>
+
+              {/* TRACK ROW 4: TRK-4 Emergency Halt / Signal Status */}
+              <div className="grid grid-cols-[110px_1fr] items-center min-h-[56px] relative z-10 group">
+                <div className={`text-xs font-black pl-2 flex items-center space-x-1.5 ${activeEmergencyCount > 0 ? "text-rose-600" : "text-slate-500"}`}>
+                  <span className={`w-2 h-2 rounded-full ${activeEmergencyCount > 0 ? "bg-rose-500 animate-ping" : "bg-emerald-500"}`}></span>
+                  <span>TRK-4 (EMG)</span>
+                </div>
+                <div className="relative h-11 w-full">
+                  {activeEmergencyCount > 0 ? (
+                    <motion.div 
+                      whileHover={{ scale: 1.02, y: -2, boxShadow: "0 4px 12px rgba(239, 68, 68, 0.25)" }}
+                      whileTap={{ scale: 0.98 }}
+                      className="absolute top-1 bottom-1 bg-rose-50 border-2 border-rose-400 rounded-xl px-3 flex items-center justify-between text-xs font-black text-rose-800 shadow-sm cursor-pointer space-x-1.5"
+                      style={{ left: "19%", width: "24%" }}
+                      onClick={() => setActiveModalBlock({ 
+                        title: emergencyClosures[0]?.reason || "EMERGENCY HALT ACTIVE", 
+                        type: "CRITICAL INCIDENT", 
+                        status: "RED ASPECT LOCKED", 
+                        duration: "Active", 
+                        details: "Track locked out under active emergency halt", 
+                        location: `Block ${emergencyClosures[0]?.block_id || "Corridor"}` 
+                      })}
+                    >
+                      <div className="flex items-center space-x-1.5 truncate">
+                        <AlertTriangle className="w-4 h-4 shrink-0 text-rose-600 animate-bounce" />
+                        <span className="truncate">{emergencyClosures[0]?.reason || "EMERGENCY HALT"}</span>
+                      </div>
+                      <span className="text-[9px] font-mono bg-rose-600 px-1.5 py-0.5 rounded text-white">
+                        HALT
+                      </span>
+                    </motion.div>
+                  ) : (
+                    <div className="text-xs text-emerald-700 font-mono pl-3 pt-3 flex items-center space-x-1.5">
+                      <span className="w-1.5 h-1.5 rounded-full bg-emerald-500"></span>
+                      <span>All blocks clear • Standard headway</span>
                     </div>
-                    <span className="text-[9px] font-mono bg-rose-600 px-1.5 py-0.5 rounded text-white">
-                      HALT
-                    </span>
-                  </motion.div>
+                  )}
                 </div>
               </div>
 
@@ -852,9 +890,20 @@ export const CorridorsView: React.FC<CorridorsViewProps> = ({
                   Enqueued Maintenance Work Orders
                 </h2>
               </div>
-              <span className="text-xs font-mono font-bold text-slate-500 bg-slate-100 px-2.5 py-0.5 rounded-lg border border-slate-200">
-                {workOrders.length} Enqueued
-              </span>
+              <div className="flex items-center space-x-2">
+                <span className="text-xs font-mono font-bold text-slate-500 bg-slate-100 px-2.5 py-0.5 rounded-lg border border-slate-200">
+                  {workOrders.length} Enqueued
+                </span>
+                {onOpenWorkOrder && (
+                  <button
+                    onClick={() => onOpenWorkOrder()}
+                    className="flex items-center space-x-1 px-3 py-1 bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold rounded-lg shadow-sm transition cursor-pointer"
+                  >
+                    <Plus className="w-3.5 h-3.5" />
+                    <span>Add Work Order</span>
+                  </button>
+                )}
+              </div>
             </div>
 
             {workOrders.length === 0 ? (

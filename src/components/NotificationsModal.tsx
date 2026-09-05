@@ -10,7 +10,6 @@ import {
   CheckCheck, 
   Volume2, 
   VolumeX, 
-  PlusCircle, 
   Clock,
   Radio
 } from "lucide-react";
@@ -70,51 +69,6 @@ export const NotificationsModal: React.FC<NotificationsModalProps> = ({
     setNotifications(prev => prev.filter(n => n.id !== id));
   };
 
-  const handleSimulateAlert = () => {
-    const alertTypes: Array<NotificationItem["type"]> = ["critical", "warning", "info", "success"];
-    const randomType = alertTypes[Math.floor(Math.random() * alertTypes.length)];
-    
-    const sampleAlerts = [
-      {
-        title: "Track Sensor Temp Elevation",
-        message: "Hot axle box detector triggered at KM 118.4 on UP Main Line. Ambient temp 41°C.",
-        sector: "TRK-01 / NEC-11",
-        type: "critical" as const
-      },
-      {
-        title: "Overhead Traction Voltage Fluctuation",
-        message: "Substation 04B reported catenary drop to 21.8 kV. Auto-tap changer engaged.",
-        sector: "TDMS / Sub-04B",
-        type: "warning" as const
-      },
-      {
-        title: "Rajdhani 12301 Entering Block 14",
-        message: "High-speed transit confirmed. Auto-interlocking set to GREEN clear aspect.",
-        sector: "NDLS-ALJN Trunk",
-        type: "info" as const
-      },
-      {
-        title: "Bundled Block 2001 Cleared",
-        message: "Joint TMS & SMMS maintenance finished 8 mins ahead of schedule.",
-        sector: "Block 2001",
-        type: "success" as const
-      }
-    ];
-
-    const chosen = sampleAlerts[Math.floor(Math.random() * sampleAlerts.length)];
-    const newAlert: NotificationItem = {
-      id: `alert-${Date.now()}`,
-      title: chosen.title,
-      message: chosen.message,
-      timestamp: "Just now",
-      type: chosen.type,
-      sector: chosen.sector,
-      read: false
-    };
-
-    setNotifications(prev => [newAlert, ...prev]);
-  };
-
   const getTypeIcon = (type: NotificationItem["type"]) => {
     switch (type) {
       case "critical":
@@ -145,24 +99,26 @@ export const NotificationsModal: React.FC<NotificationsModalProps> = ({
 
   return (
     <AnimatePresence>
-      <div className="fixed inset-0 bg-slate-900/50 backdrop-blur-sm flex items-center justify-center p-4 z-50">
+      <div id="notifications-modal-backdrop" className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4 z-50">
         <motion.div 
           initial={{ opacity: 0, scale: 0.95, y: 15 }}
           animate={{ opacity: 1, scale: 1, y: 0 }}
           exit={{ opacity: 0, scale: 0.95, y: 15 }}
-          className="bg-white rounded-2xl max-w-2xl w-full p-6 text-slate-900 shadow-2xl relative border border-slate-200 flex flex-col max-h-[85vh]"
+          className="bg-white rounded-2xl max-w-2xl w-full p-6 text-slate-900 shadow-2xl relative border border-slate-300 flex flex-col max-h-[85vh] font-sans"
         >
           {/* Header */}
           <div className="flex items-center justify-between border-b border-slate-200 pb-4 mb-4">
             <div className="flex items-center space-x-3">
-              <div className="p-2.5 bg-blue-50 text-blue-600 rounded-xl border border-blue-200">
+              <div className="p-2.5 bg-blue-50 text-blue-900 rounded-xl border border-blue-200">
                 <Bell className="w-5 h-5 animate-pulse" />
               </div>
               <div>
                 <div className="flex items-center space-x-2">
-                  <h3 className="text-base font-black text-slate-900">Live Telemetry & Dispatch Alerts</h3>
+                  <h3 className="text-base font-black text-slate-900 font-serif uppercase tracking-tight">
+                    Live Telemetry & Operational Alerts
+                  </h3>
                   {unreadCount > 0 && (
-                    <span className="text-[10px] bg-rose-500 text-white font-bold px-2 py-0.5 rounded-full font-mono">
+                    <span className="text-[10px] bg-rose-600 text-white font-bold px-2 py-0.5 rounded-full font-mono">
                       {unreadCount} NEW
                     </span>
                   )}
@@ -179,9 +135,9 @@ export const NotificationsModal: React.FC<NotificationsModalProps> = ({
                 whileTap={{ scale: 0.95 }}
                 onClick={() => setSoundEnabled(!soundEnabled)}
                 title={soundEnabled ? "Mute telemetry chimes" : "Unmute telemetry chimes"}
-                className={`p-2 rounded-xl border transition ${
+                className={`p-2 rounded-xl border transition cursor-pointer ${
                   soundEnabled 
-                    ? "bg-blue-50 border-blue-200 text-blue-600" 
+                    ? "bg-blue-50 border-blue-200 text-blue-900" 
                     : "bg-slate-100 border-slate-200 text-slate-400"
                 }`}
               >
@@ -190,7 +146,7 @@ export const NotificationsModal: React.FC<NotificationsModalProps> = ({
 
               <button 
                 onClick={onClose} 
-                className="text-slate-400 hover:text-slate-700 p-1.5 rounded-lg hover:bg-slate-100 transition"
+                className="text-slate-400 hover:text-slate-700 p-1.5 rounded-lg hover:bg-slate-100 transition cursor-pointer"
               >
                 <X className="w-5 h-5" />
               </button>
@@ -199,14 +155,14 @@ export const NotificationsModal: React.FC<NotificationsModalProps> = ({
 
           {/* Filter Bar & Action Controls */}
           <div className="flex flex-wrap items-center justify-between gap-2 pb-3 mb-2 border-b border-slate-200">
-            <div className="flex items-center space-x-1.5 bg-slate-100 p-1 rounded-xl border border-slate-200">
+            <div className="flex items-center space-x-1.5 bg-slate-100 p-1 rounded-xl border border-slate-200 font-mono">
               {(["all", "critical", "warning", "info"] as const).map((tab) => (
                 <button
                   key={tab}
                   onClick={() => setFilter(tab)}
-                  className={`px-2.5 py-1 text-[11px] font-bold rounded-lg uppercase font-mono transition ${
+                  className={`px-2.5 py-1 text-[11px] font-bold rounded-lg uppercase transition cursor-pointer ${
                     filter === tab 
-                      ? "bg-white text-blue-600 shadow-xs border border-slate-200" 
+                      ? "bg-white text-blue-900 shadow-xs border border-slate-200" 
                       : "text-slate-600 hover:text-slate-900"
                   }`}
                 >
@@ -215,21 +171,11 @@ export const NotificationsModal: React.FC<NotificationsModalProps> = ({
               ))}
             </div>
 
-            <div className="flex items-center space-x-2">
-              <motion.button
-                whileHover={{ scale: 1.02 }}
-                whileTap={{ scale: 0.98 }}
-                onClick={handleSimulateAlert}
-                className="flex items-center space-x-1 text-[11px] font-mono px-2.5 py-1 rounded-lg bg-blue-50 border border-blue-200 text-blue-700 hover:bg-blue-100 transition"
-              >
-                <PlusCircle className="w-3.5 h-3.5" />
-                <span>Simulate Event</span>
-              </motion.button>
-
+            <div className="flex items-center space-x-2 font-mono">
               {unreadCount > 0 && (
                 <button
                   onClick={markAllAsRead}
-                  className="flex items-center space-x-1 text-[11px] font-mono px-2.5 py-1 rounded-lg bg-slate-100 border border-slate-200 text-slate-700 hover:bg-slate-200 transition"
+                  className="flex items-center space-x-1 text-[11px] px-2.5 py-1 rounded-lg bg-slate-100 border border-slate-200 text-slate-700 hover:bg-slate-200 transition cursor-pointer"
                 >
                   <CheckCheck className="w-3.5 h-3.5" />
                   <span>Mark All Read</span>
@@ -239,22 +185,22 @@ export const NotificationsModal: React.FC<NotificationsModalProps> = ({
               {notifications.length > 0 && (
                 <button
                   onClick={clearAll}
-                  className="flex items-center space-x-1 text-[11px] font-mono px-2.5 py-1 rounded-lg bg-rose-50 border border-rose-200 text-rose-700 hover:bg-rose-100 transition"
+                  className="flex items-center space-x-1 text-[11px] px-2.5 py-1 rounded-lg bg-rose-50 border border-rose-200 text-rose-700 hover:bg-rose-100 transition cursor-pointer"
                 >
                   <Trash2 className="w-3.5 h-3.5" />
-                  <span>Clear</span>
+                  <span>Clear All</span>
                 </button>
               )}
             </div>
           </div>
 
           {/* Notifications List */}
-          <div className="flex-1 overflow-y-auto space-y-2 pr-1 custom-scrollbar min-h-[220px]">
+          <div className="flex-1 overflow-y-auto space-y-2 pr-1 min-h-[220px]">
             {filteredNotifications.length === 0 ? (
-              <div className="h-48 flex flex-col items-center justify-center text-center space-y-2 text-slate-400">
-                <Radio className="w-8 h-8 opacity-40 text-blue-600" />
-                <p className="text-xs font-mono">No telemetry alerts match current filter.</p>
-                <p className="text-[10px] text-slate-400">All block safety interlocks are operating within standard tolerance.</p>
+              <div className="h-48 flex flex-col items-center justify-center text-center space-y-2 text-slate-400 font-mono">
+                <Radio className="w-8 h-8 opacity-40 text-blue-900" />
+                <p className="text-xs font-bold text-slate-700">No active live telemetry alerts.</p>
+                <p className="text-[11px] text-slate-400">All live block safety interlocks are operating within nominal limits.</p>
               </div>
             ) : (
               filteredNotifications.map((notif) => {
@@ -305,14 +251,14 @@ export const NotificationsModal: React.FC<NotificationsModalProps> = ({
                           <button
                             onClick={() => toggleRead(notif.id)}
                             title={notif.read ? "Mark as unread" : "Mark as read"}
-                            className="p-1 text-slate-400 hover:text-blue-600 hover:bg-slate-100 rounded transition"
+                            className="p-1 text-slate-400 hover:text-blue-600 hover:bg-slate-100 rounded transition cursor-pointer"
                           >
                             <CheckCircle2 className={`w-3.5 h-3.5 ${notif.read ? "text-blue-600" : "text-slate-300"}`} />
                           </button>
                           <button
                             onClick={() => deleteNotification(notif.id)}
                             title="Delete alert"
-                            className="p-1 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded transition"
+                            className="p-1 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded transition cursor-pointer"
                           >
                             <Trash2 className="w-3.5 h-3.5" />
                           </button>
@@ -333,7 +279,7 @@ export const NotificationsModal: React.FC<NotificationsModalProps> = ({
                         {onAcknowledgeAlert && (
                           <button
                             onClick={() => onAcknowledgeAlert(notif)}
-                            className="px-2.5 py-1 rounded bg-blue-600 text-white font-bold hover:bg-blue-700 transition"
+                            className="px-2.5 py-1 rounded bg-blue-900 text-white font-bold hover:bg-blue-800 transition cursor-pointer"
                           >
                             Inspect Affected Block
                           </button>
@@ -348,10 +294,10 @@ export const NotificationsModal: React.FC<NotificationsModalProps> = ({
 
           {/* Footer Info */}
           <div className="mt-4 pt-3 border-t border-slate-200 flex items-center justify-between text-[10px] font-mono text-slate-500">
-            <span>System Mode: <strong className="text-blue-600">ACTIVE TELEMETRY POLLING</strong> (1000ms)</span>
+            <span>System Status: <strong className="text-emerald-700">LIVE TELEMETRY ACTIVE</strong></span>
             <button
               onClick={onClose}
-              className="px-4 py-1.5 rounded-xl text-xs font-bold bg-slate-100 hover:bg-slate-200 text-slate-700 border border-slate-200 transition"
+              className="px-4 py-1.5 rounded-xl text-xs font-bold bg-slate-100 hover:bg-slate-200 text-slate-700 border border-slate-200 transition cursor-pointer"
             >
               Close
             </button>
@@ -361,4 +307,3 @@ export const NotificationsModal: React.FC<NotificationsModalProps> = ({
     </AnimatePresence>
   );
 };
-

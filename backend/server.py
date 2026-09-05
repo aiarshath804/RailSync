@@ -18,7 +18,7 @@ import io
 import time
 import argparse
 import datetime
-from http.server import HTTPServer, BaseHTTPRequestHandler
+from http.server import HTTPServer, ThreadingHTTPServer, BaseHTTPRequestHandler
 from urllib.parse import urlparse, parse_qs
 
 from backend.database import init_db
@@ -26,6 +26,7 @@ from backend.repository import RailSyncRepository
 from backend.ai_engine import AIRailSyncPrioritizationEngine
 from backend.optimizer import CPOrToolsBlockOptimizer
 from backend.pipeline.service import PipelineImportService
+from backend.pipeline.validator import CanonicalMaintenanceRequest
 from backend.services.prioritization_service import PrioritizationService
 from backend.services.prioritization_scenarios import PrioritizationScenarioRunner
 from backend.core.safety_config import SafetyConfig
@@ -41,6 +42,16 @@ from backend.services.ml_service import MLDecisionService
 from backend.services.baseline_comparison_service import BaselineComparisonService
 from backend.services.step6_scenarios import Step6ScenarioRunner
 from backend.services.step7_validation_service import Step7ValidationService
+from backend.services.railradar_service import (
+    corridor_engine,
+    CORRIDOR_TITLE,
+    CORRIDOR_BLOCKS_DEF,
+    CORRIDOR_STATIONS,
+    CORRIDOR_DISCLAIMER,
+    EMERGENCY_DISCLAIMER,
+)
+from backend.services.dispatch_advisory_service import dispatch_advisory_service
+from backend.services.auth_service import auth_service, ROLE_PERMISSIONS
 
 # Initialize database and singletons
 init_db()
@@ -61,6 +72,57 @@ class RailSyncAPIHandler(BaseHTTPRequestHandler):
         self.send_header("Access-Control-Allow-Methods", "GET, POST, PUT, DELETE, OPTIONS")
         self.send_header("Access-Control-Allow-Headers", "*")
         self.end_headers()
+
+    def _get_auth_user(self):
+        """Extracts and validates user from Authorization or session header."""
+        auth_header = self.headers.get("Authorization", "")
+        token = ""
+        if auth_header.startswith("Bearer "):
+            token = auth_header[7:].strip()
+        elif auth_header:
+            token = auth_header.strip()
+        else:
+            token = self.headers.get("X-Session-Token", "").strip()
+
+        if not token:
+            return None
+        return auth_service.get_user_from_token(token)
+
+    def _require_auth(self):
+        """Ensures request comes from an authenticated session."""
+        user = self._get_auth_user()
+        if not user:
+            self._set_headers(401)
+            self.wfile.write(json.dumps({
+                "status": "ERROR",
+                "code": "UNAUTHORIZED",
+                "error": "Authentication required. Please sign in with your Railway Enterprise credentials."
+            }).encode("utf-8"))
+            return None
+        return user
+
+    def _require_permission(self, permission: str):
+        """Enforces that the authenticated user possesses the specific RBAC permission."""
+        user = self._get_auth_user()
+        if not user:
+            self._set_headers(401)
+            self.wfile.write(json.dumps({
+                "status": "ERROR",
+                "code": "UNAUTHORIZED",
+                "error": f"Authentication required to perform '{permission}'."
+            }).encode("utf-8"))
+            return None
+
+        if not auth_service.has_permission(user, permission):
+            self._set_headers(403)
+            self.wfile.write(json.dumps({
+                "status": "ERROR",
+                "code": "FORBIDDEN",
+                "error": f"Access Denied: Officer '{user.get('name')}' (Role: {user.get('role')}) lacks the authorized clearance '{permission}' for this operational action."
+            }).encode("utf-8"))
+            return None
+
+        return user
 
     def do_OPTIONS(self):
         self._set_headers(200)
@@ -135,6 +197,173 @@ class RailSyncAPIHandler(BaseHTTPRequestHandler):
                 "timestamp": datetime.datetime.now().isoformat()
             }
             self.wfile.write(json.dumps(res).encode("utf-8"))
+            return
+
+        # -------------------------------------------------------------
+        # Authentication & Role-Based Access Control (RBAC) GET Endpoints
+        # -------------------------------------------------------------
+        if path in ["/api/v1/auth/me", "/api/v1/me"]:
+            user = self._get_auth_user()
+            if not user:
+                self._set_headers(401)
+                self.wfile.write(json.dumps({
+                    "status": "UNAUTHENTICATED",
+                    "authenticated": False,
+                    "error": "No active officer session found. Please sign in."
+                }).encode("utf-8"))
+                return
+            self._set_headers(200)
+            self.wfile.write(json.dumps({
+                "status": "SUCCESS",
+                "authenticated": True,
+                "user": user
+            }).encode("utf-8"))
+            return
+
+        if path in ["/api/v1/auth/demo-accounts", "/api/v1/demo-accounts"]:
+            accounts = auth_service.get_demo_accounts()
+            self._set_headers(200)
+            self.wfile.write(json.dumps({
+                "status": "SUCCESS",
+                "accounts": accounts
+            }).encode("utf-8"))
+            return
+
+        if path in ["/api/v1/users", "/api/v1/auth/users"]:
+            admin_user = self._require_permission("MANAGE_USERS")
+            if not admin_user:
+                return
+            all_users = auth_service.get_all_users()
+            self._set_headers(200)
+            self.wfile.write(json.dumps({
+                "status": "SUCCESS",
+                "users": all_users,
+                "total_users": len(all_users)
+            }).encode("utf-8"))
+            return
+
+        if path in ["/api/v1/auth/roles", "/api/v1/roles"]:
+            self._set_headers(200)
+            self.wfile.write(json.dumps({
+                "status": "SUCCESS",
+                "roles": ROLE_PERMISSIONS
+            }).encode("utf-8"))
+            return
+
+        # -------------------------------------------------------------
+        # North Tamil Nadu Corridor & Real-Time RailRadar Endpoints
+        # -------------------------------------------------------------
+        # Live Corridor State (5 Prototype Blocks: B1 to B5)
+        if path in ["/api/v1/corridor/live", "/api/v1/corridor/state", "/api/v1/trains/corridor-live"]:
+            is_refresh = query.get("refresh", ["false"])[0].lower() == "true" or query.get("force", ["false"])[0].lower() == "true"
+            corridor_state = corridor_engine.evaluate_corridor_state(force_refresh=is_refresh)
+            self._set_headers(200)
+            self.wfile.write(json.dumps(corridor_state).encode("utf-8"))
+            return
+
+        # Live Data Control Metadata (GET)
+        if path in ["/api/v1/corridor/live/control", "/api/v1/live-control"]:
+            state = corridor_engine.evaluate_corridor_state(force_refresh=False)
+            self._set_headers(200)
+            self.wfile.write(json.dumps({
+                "status": "SUCCESS",
+                "live_status": state.get("live_status"),
+                "polling_enabled": state.get("polling_enabled"),
+                "requests_this_session": state.get("requests_this_session"),
+                "last_successful_update": state.get("last_live_success_time"),
+                "next_refresh": state.get("next_refresh"),
+            }).encode("utf-8"))
+            return
+
+        # Corridor Prototype Block Definitions
+        if path == "/api/v1/corridor/blocks":
+            self._set_headers(200)
+            self.wfile.write(json.dumps({
+                "corridor_title": CORRIDOR_TITLE,
+                "disclaimer": CORRIDOR_DISCLAIMER,
+                "blocks": CORRIDOR_BLOCKS_DEF,
+                "stations": CORRIDOR_STATIONS
+            }).encode("utf-8"))
+            return
+
+        # Live Train Movement Endpoint: GET /api/v1/trains/{trainNumber}/live
+        if path.startswith("/api/v1/trains/") and path.endswith("/live"):
+            parts = path.split("/")
+            train_number = parts[4] if len(parts) >= 5 else ""
+            if not train_number:
+                self._set_headers(400)
+                self.wfile.write(json.dumps({"error": "Train number missing"}).encode("utf-8"))
+                return
+            
+            # Check active mapped corridor trains first
+            corridor_state = corridor_engine.evaluate_corridor_state()
+            matched_train = next((t for t in corridor_state["active_trains"] if t["train_number"] == train_number), None)
+            
+            if matched_train:
+                self._set_headers(200)
+                self.wfile.write(json.dumps({
+                    "status": "SUCCESS",
+                    "source": corridor_state["data_source"],
+                    "train": matched_train
+                }).encode("utf-8"))
+                return
+            
+            # Try live API directly via provider
+            live_train, err = corridor_engine.provider.get_live_train(train_number)
+            if live_train:
+                self._set_headers(200)
+                self.wfile.write(json.dumps({
+                    "status": "SUCCESS",
+                    "source": "RailRadar Live Stream",
+                    "train": live_train
+                }).encode("utf-8"))
+                return
+
+            self._set_headers(404)
+            self.wfile.write(json.dumps({
+                "status": "NOT_FOUND",
+                "error": f"Train {train_number} not found in corridor telemetry or live provider."
+            }).encode("utf-8"))
+            return
+
+        # Live Station Board Endpoint: GET /api/v1/stations/{stationCode}/live
+        if path.startswith("/api/v1/stations/") and path.endswith("/live"):
+            parts = path.split("/")
+            station_code = parts[4] if len(parts) >= 5 else ""
+            hours = int(query.get("hours", [4])[0])
+            board, err = corridor_engine.provider.get_station_board(station_code, hours=hours)
+            if board:
+                self._set_headers(200)
+                self.wfile.write(json.dumps(board).encode("utf-8"))
+                return
+            
+            # Fallback station response for corridor station
+            stn_def = next((s for s in CORRIDOR_STATIONS if s["code"] == station_code.upper()), None)
+            corridor_state = corridor_engine.evaluate_corridor_state()
+            station_trains = [
+                t for t in corridor_state["active_trains"]
+                if t.get("current_station") == station_code.upper() or t.get("next_station") == station_code.upper()
+            ]
+            self._set_headers(200)
+            self.wfile.write(json.dumps({
+                "station": station_code.upper(),
+                "station_name": stn_def["name"] if stn_def else station_code.upper(),
+                "hours_window": hours,
+                "trains": station_trains,
+                "data_source": corridor_state["data_source"],
+                "last_updated": datetime.datetime.now().isoformat()
+            }).encode("utf-8"))
+            return
+
+        # Emergency Event Logs: GET /api/v1/emergency/logs
+        if path == "/api/v1/emergency/logs":
+            self._set_headers(200)
+            self.wfile.write(json.dumps({
+                "active_count": len(corridor_engine.emergency_closures),
+                "active_closures": list(corridor_engine.emergency_closures.values()),
+                "logs": corridor_engine.emergency_logs,
+                "disclaimer": EMERGENCY_DISCLAIMER
+            }).encode("utf-8"))
             return
 
         # List Import Batches
@@ -224,7 +453,7 @@ class RailSyncAPIHandler(BaseHTTPRequestHandler):
 
         # Candidate Block Windows (GET)
         if path == "/api/v1/optimize/candidate-windows":
-            corridor_id = query.get("corridor_id", ["NDLS-HWH-01"])[0]
+            corridor_id = query.get("corridor_id", ["MAS-TRL-05"])[0]
             horizon_hours = float(query.get("horizon_hours", [24.0])[0])
             min_dur = int(query.get("min_duration_minutes", [60])[0])
             now = datetime.datetime.now()
@@ -248,7 +477,7 @@ class RailSyncAPIHandler(BaseHTTPRequestHandler):
 
         # Corridor Availability & Timeline (GET)
         if path == "/api/v1/optimize/corridor-availability":
-            corridor_id = query.get("corridor_id", ["NDLS-HWH-01"])[0]
+            corridor_id = query.get("corridor_id", ["MAS-TRL-05"])[0]
             horizon_hours = float(query.get("horizon_hours", [24.0])[0])
             now = datetime.datetime.now()
             trains = repo.get_all_trains()
@@ -284,6 +513,20 @@ class RailSyncAPIHandler(BaseHTTPRequestHandler):
                 "total_logs": len(logs),
                 "audit_logs": logs
             }).encode("utf-8"))
+            return
+
+        # Dispatch Advisory Endpoint
+        if path in ["/api/v1/dispatch/advisory", "/api/v1/dispatch/advisories"]:
+            controller_id = query.get("controller_id", ["CHIEF_DISPATCHER_01"])[0]
+            corridor_id = query.get("corridor_id", [None])[0]
+            client_ip = self.client_address[0] if hasattr(self, "client_address") else "127.0.0.1"
+            advisory_data = dispatch_advisory_service.generate_advisory(
+                corridor_id=corridor_id,
+                controller_id=controller_id,
+                ip_address=client_ip
+            )
+            self._set_headers(200)
+            self.wfile.write(json.dumps(advisory_data).encode("utf-8"))
             return
 
         # Safety Evaluated Requests (with classification, deadlines, isolations)
@@ -401,6 +644,35 @@ class RailSyncAPIHandler(BaseHTTPRequestHandler):
             }
             self._set_headers(200)
             self.wfile.write(json.dumps(res).encode("utf-8"))
+            return
+
+        # Corridor Assets Endpoint (GET)
+        if path in ["/api/v1/assets", "/api/v1/corridor/assets"]:
+            assets = repo.get_all_assets()
+            self._set_headers(200)
+            self.wfile.write(json.dumps(assets).encode("utf-8"))
+            return
+
+        # Maintenance Work Orders Endpoint (GET)
+        if path in ["/api/v1/work-orders", "/api/v1/maintenance/work-orders"]:
+            requests = repo.get_all_requests()
+            work_orders = []
+            for r in requests:
+                work_orders.append({
+                    "id": r["id"],
+                    "title": r.get("request_code") or f"WO-{r['id']}",
+                    "assetId": r.get("asset_id") or "TRK-01",
+                    "department": r.get("source_system") or r.get("department_code") or "TMS",
+                    "urgency": r.get("priority_level") or ("HIGH" if r.get("defect_severity", 1) >= 4 else "MEDIUM" if r.get("defect_severity", 1) >= 3 else "LOW"),
+                    "duration": r.get("duration_minutes") or 90,
+                    "status": r.get("status") or "PENDING",
+                    "notes": r.get("notes") or r.get("defect_type") or "Maintenance inspection",
+                    "assigned_to": r.get("crew_required") or "Operations Maintenance Crew",
+                    "due_date": r.get("due_date") or r.get("requested_start_time"),
+                    "created_at": r.get("imported_at") or r.get("requested_start_time") or "Recently"
+                })
+            self._set_headers(200)
+            self.wfile.write(json.dumps(work_orders).encode("utf-8"))
             return
 
         # Analytics Data
@@ -550,6 +822,372 @@ class RailSyncAPIHandler(BaseHTTPRequestHandler):
                 json_body = json.loads(body_bytes.decode("utf-8"))
             except Exception:
                 json_body = {}
+
+        # -------------------------------------------------------------
+        # Authentication & Session Management Endpoints (POST)
+        # -------------------------------------------------------------
+        if path in ["/api/v1/auth/login", "/api/v1/login"]:
+            email = str(json_body.get("email", "")).strip()
+            password = str(json_body.get("password", "")).strip()
+            client_ip = self.client_address[0] if hasattr(self, "client_address") else "127.0.0.1"
+
+            if not email or not password:
+                self._set_headers(400)
+                self.wfile.write(json.dumps({
+                    "status": "ERROR",
+                    "code": "MISSING_CREDENTIALS",
+                    "error": "Official Railway Enterprise email and password are required."
+                }).encode("utf-8"))
+                return
+
+            auth_result = auth_service.authenticate(email, password, ip_address=client_ip)
+            if not auth_result:
+                self._set_headers(401)
+                self.wfile.write(json.dumps({
+                    "status": "ERROR",
+                    "code": "INVALID_CREDENTIALS",
+                    "error": "Invalid official credentials. Please verify your Railway Enterprise email and security password."
+                }).encode("utf-8"))
+                return
+
+            self._set_headers(200)
+            self.wfile.write(json.dumps({
+                "status": "SUCCESS",
+                "message": f"Officer {auth_result['user']['name']} authenticated successfully.",
+                "session_token": auth_result["session_token"],
+                "user": auth_result["user"],
+                "expires_at": auth_result["expires_at"]
+            }).encode("utf-8"))
+            return
+
+        if path in ["/api/v1/auth/logout", "/api/v1/logout"]:
+            auth_header = self.headers.get("Authorization", "")
+            token = auth_header.replace("Bearer ", "").strip() or self.headers.get("X-Session-Token", "").strip() or json_body.get("session_token", "")
+            auth_service.logout(token)
+            self._set_headers(200)
+            self.wfile.write(json.dumps({
+                "status": "SUCCESS",
+                "message": "Railway Enterprise session terminated successfully."
+            }).encode("utf-8"))
+            return
+
+        # -------------------------------------------------------------
+        # Work Orders API (POST)
+        # -------------------------------------------------------------
+        if path in ["/api/v1/work-orders", "/api/v1/maintenance/work-orders"]:
+            auth_user = self._get_auth_user()
+            if auth_user:
+                if not auth_service.has_permission(auth_user, "CREATE_REQUEST"):
+                    self._set_headers(403)
+                    self.wfile.write(json.dumps({
+                        "status": "ERROR",
+                        "error": f"Access Denied: Officer '{auth_user.get('name')}' (Role: {auth_user.get('role')}) lacks permission 'CREATE_REQUEST'."
+                    }).encode("utf-8"))
+                    return
+
+            title = json_body.get("title") or json_body.get("request_code")
+            asset_id = json_body.get("assetId") or json_body.get("asset_id") or json_body.get("asset")
+            department = json_body.get("department") or json_body.get("department_code") or "TMS"
+
+            if auth_user and not auth_service.can_access_department(auth_user, department):
+                self._set_headers(403)
+                self.wfile.write(json.dumps({
+                    "status": "ERROR",
+                    "error": f"Department Mismatch: Officer '{auth_user.get('name')}' belongs to {auth_user.get('department')} and is unauthorized to submit work orders for {department}."
+                }).encode("utf-8"))
+                return
+
+            urgency = str(json_body.get("urgency") or json_body.get("priority") or "MEDIUM").upper()
+            description = json_body.get("description") or json_body.get("notes")
+            duration = int(json_body.get("duration") or json_body.get("duration_minutes") or 90)
+            status = str(json_body.get("status") or "PENDING").upper()
+            due_date_str = json_body.get("dueDate") or json_body.get("due_date")
+            assigned_to = json_body.get("assignedTo") or json_body.get("assigned_to") or (auth_user.get("name") if auth_user else "Corridor Engineering Division")
+
+            # Strict field validation
+            if not title or not str(title).strip():
+                self._set_headers(400)
+                self.wfile.write(json.dumps({"error": "Work Order Title is required."}).encode("utf-8"))
+                return
+            if not asset_id or not str(asset_id).strip():
+                self._set_headers(400)
+                self.wfile.write(json.dumps({"error": "Asset selection is required."}).encode("utf-8"))
+                return
+            if not urgency or not str(urgency).strip():
+                self._set_headers(400)
+                self.wfile.write(json.dumps({"error": "Priority level is required."}).encode("utf-8"))
+                return
+            if not description or not str(description).strip():
+                self._set_headers(400)
+                self.wfile.write(json.dumps({"error": "Description is required."}).encode("utf-8"))
+                return
+            if not due_date_str or not str(due_date_str).strip():
+                self._set_headers(400)
+                self.wfile.write(json.dumps({"error": "Due Date is required."}).encode("utf-8"))
+                return
+
+            try:
+                try:
+                    due_date_dt = datetime.datetime.fromisoformat(str(due_date_str).replace("Z", "+00:00"))
+                except Exception:
+                    due_date_dt = datetime.datetime.now() + datetime.timedelta(days=2)
+
+                now = datetime.datetime.now()
+                req_obj = CanonicalMaintenanceRequest(
+                    request_id=str(title).strip(),
+                    source_system=str(department).upper(),
+                    department=str(department).upper(),
+                    department_id=1 if department == "TMS" else 2 if department == "SMMS" else 3,
+                    department_code=str(department).upper(),
+                    asset_id=str(asset_id).strip(),
+                    asset_type="TRACK" if "TRK" in str(asset_id) else "SIGNAL" if "SIG" in str(asset_id) else "OHE" if "OHE" in str(asset_id) else "CORRIDOR",
+                    corridor_id="MAS-TRL-05",
+                    section_id="MAS-TRL-05",
+                    location_start_km=0.0,
+                    location_end_km=5.0,
+                    work_type="CORRIDOR_MAINTENANCE",
+                    defect_type=str(description).strip(),
+                    description=str(description).strip(),
+                    severity=5 if urgency == "CRITICAL" else 4 if urgency == "HIGH" else 3 if urgency == "MEDIUM" else 1,
+                    reported_at=now,
+                    due_date=due_date_dt,
+                    estimated_duration_minutes=duration,
+                    preferred_start=now,
+                    preferred_end=now + datetime.timedelta(minutes=duration),
+                    priority_score=90.0 if urgency == "CRITICAL" else 75.0 if urgency == "HIGH" else 50.0 if urgency == "MEDIUM" else 25.0,
+                    priority_level=urgency,
+                    notes=str(description).strip(),
+                    status=status,
+                    crew_required=4
+                )
+                inserted_id = repo.insert_maintenance_request(req_obj)
+
+                saved_record = {
+                    "id": inserted_id,
+                    "title": str(title).strip(),
+                    "assetId": str(asset_id).strip(),
+                    "department": str(department).upper(),
+                    "urgency": urgency,
+                    "duration": duration,
+                    "status": status,
+                    "notes": str(description).strip(),
+                    "assigned_to": str(assigned_to).strip(),
+                    "due_date": str(due_date_str),
+                    "created_at": now.isoformat()
+                }
+                self._set_headers(201)
+                self.wfile.write(json.dumps({
+                    "status": "SUCCESS",
+                    "message": "Work order created successfully.",
+                    "work_order": saved_record
+                }).encode("utf-8"))
+                return
+            except Exception as e:
+                self._set_headers(500)
+                self.wfile.write(json.dumps({"error": f"Failed to persist work order: {str(e)}"}).encode("utf-8"))
+                return
+
+        # -------------------------------------------------------------
+        # North Tamil Nadu Corridor & Real-Time RailRadar POST Endpoints
+        # -------------------------------------------------------------
+        # Live Data Control (START, PAUSE, STOP, REFRESH)
+        if path in ["/api/v1/corridor/live/control", "/api/v1/live-control"]:
+            auth_user = self._get_auth_user()
+            if auth_user and not auth_service.has_permission(auth_user, "CONTROL_LIVE_DATA"):
+                self._set_headers(403)
+                self.wfile.write(json.dumps({
+                    "status": "ERROR",
+                    "error": f"Access Denied: Officer '{auth_user.get('name')}' (Role: {auth_user.get('role')}) lacks permission 'CONTROL_LIVE_DATA'. Only Operations Controllers and Administrators can toggle live telemetry control."
+                }).encode("utf-8"))
+                return
+
+            action = str(json_body.get("action") or "PAUSE").upper()
+            if action == "START":
+                updated_state = corridor_engine.start_live_polling()
+            elif action == "PAUSE":
+                updated_state = corridor_engine.pause_live_polling()
+            elif action == "STOP":
+                updated_state = corridor_engine.stop_live_polling()
+            elif action == "REFRESH":
+                updated_state = corridor_engine.refresh_live_now()
+            else:
+                updated_state = corridor_engine.evaluate_corridor_state(force_refresh=False)
+
+            self._set_headers(200)
+            self.wfile.write(json.dumps({
+                "status": "SUCCESS",
+                "action": action,
+                "live_status": updated_state.get("live_status"),
+                "polling_enabled": updated_state.get("polling_enabled"),
+                "requests_this_session": updated_state.get("requests_this_session"),
+                "last_successful_update": updated_state.get("last_live_success_time"),
+                "corridor_state": updated_state
+            }).encode("utf-8"))
+            return
+
+        # Toggle Simulation / Live Mode
+        if path in ["/api/v1/corridor/toggle-mode", "/api/v1/trains/toggle-mode", "/api/v1/corridor/simulation-toggle"]:
+            req_sim = json_body.get("simulation_mode")
+            if req_sim is not None:
+                new_mode = corridor_engine.set_simulation_mode(bool(req_sim))
+            else:
+                new_mode = corridor_engine.set_simulation_mode(not corridor_engine.simulation_mode)
+            updated_state = corridor_engine.evaluate_corridor_state()
+            self._set_headers(200)
+            self.wfile.write(json.dumps({
+                "status": "SUCCESS",
+                "simulation_mode": new_mode,
+                "mode": updated_state["mode"],
+                "data_source": updated_state["data_source"],
+                "corridor_state": updated_state
+            }).encode("utf-8"))
+            return
+
+        # Functional Emergency Halt Execution
+        if path in ["/api/v1/emergency/halt", "/api/v1/emergency/stop"]:
+            block_id = str(json_body.get("block_id") or json_body.get("blockId") or "B1").upper()
+            department = str(json_body.get("department") or "OPERATIONS").upper()
+            emergency_type = str(json_body.get("emergency_type") or json_body.get("emergencyType") or "Track obstruction")
+            severity = int(json_body.get("severity") or 4)
+            description = str(json_body.get("description") or "Emergency red aspect halt initiated by sector controller")
+            controller_id = str(json_body.get("controller_id") or json_body.get("controllerId") or "CONTROLLER_MAS_01")
+
+            try:
+                halt_res = corridor_engine.trigger_emergency_halt(
+                    block_id=block_id,
+                    department=department,
+                    emergency_type=emergency_type,
+                    severity=severity,
+                    description=description,
+                    controller_id=controller_id
+                )
+                self._set_headers(200)
+                self.wfile.write(json.dumps(halt_res).encode("utf-8"))
+            except Exception as e:
+                self._set_headers(400)
+                self.wfile.write(json.dumps({"error": str(e)}).encode("utf-8"))
+            return
+
+        # Clear / Resolve Emergency Halt
+        if path == "/api/v1/emergency/resolve":
+            block_id = str(json_body.get("block_id") or json_body.get("blockId") or "").upper()
+            notes = str(json_body.get("notes") or json_body.get("resolution_notes") or "Track cleared and certified safe by field supervisor.")
+            if not block_id:
+                self._set_headers(400)
+                self.wfile.write(json.dumps({"error": "block_id required to resolve emergency"}).encode("utf-8"))
+                return
+            resolve_res = corridor_engine.resolve_emergency(block_id, resolution_notes=notes)
+            self._set_headers(200)
+            self.wfile.write(json.dumps(resolve_res).encode("utf-8"))
+            return
+
+        # AI & Rule-Based Operational Recommendation Engine (Analyzing Live Inputs)
+        if path in ["/api/v1/recommendations/analyze", "/api/v1/gemini/insights"]:
+            maint_reqs = json_body.get("requests", repo.get_all_requests())
+            rec = corridor_engine.generate_recommendation(maintenance_requests=maint_reqs)
+
+            # Format formatted Markdown string for existing modals expecting { "analysis": "..." }
+            md_analysis = (
+                f"### 🚄 {rec['title']}\n"
+                f"**Corridor**: {rec['corridor']}\n"
+                f"**Engine Classification**: `{rec['engine_type']}`\n\n"
+                f"#### 1. Situation Analysis\n{rec['sections']['situation_analysis']}\n\n"
+                f"#### 2. Conflict & Risk Detection\n{rec['sections']['conflict_detection']}\n\n"
+                f"#### 3. Recommended Operational Action\n{rec['sections']['recommended_action']}\n\n"
+                f"#### 4. Operational Reasoning\n{rec['sections']['reasoning']}\n\n"
+                f"#### 5. Expected Network Impact\n{rec['sections']['expected_impact']}\n\n"
+                f"#### 6. Alternative Tactical Plan\n{rec['sections']['alternative_plan']}\n\n"
+                f"> *{rec['disclaimer']}*"
+            )
+
+            self._set_headers(200)
+            self.wfile.write(json.dumps({
+                "status": "SUCCESS",
+                "recommendation": rec,
+                "analysis": md_analysis
+            }).encode("utf-8"))
+            return
+
+        # Dispatch Advisory POST Endpoints (Generate, Acknowledge, Apply)
+        if path in ["/api/v1/dispatch/advisory", "/api/v1/dispatch/advisories"]:
+            controller_id = json_body.get("controller_id", "CHIEF_DISPATCHER_01")
+            corridor_id = json_body.get("corridor_id")
+            client_ip = self.client_address[0] if hasattr(self, "client_address") else "127.0.0.1"
+            advisory_data = dispatch_advisory_service.generate_advisory(
+                corridor_id=corridor_id,
+                controller_id=controller_id,
+                ip_address=client_ip
+            )
+            self._set_headers(200)
+            self.wfile.write(json.dumps(advisory_data).encode("utf-8"))
+            return
+
+        if path == "/api/v1/dispatch/advisory/acknowledge":
+            auth_user = self._get_auth_user()
+            if auth_user and not auth_service.has_permission(auth_user, "ACKNOWLEDGE_DISPATCH_ADVISORY"):
+                self._set_headers(403)
+                self.wfile.write(json.dumps({
+                    "status": "ERROR",
+                    "error": f"Access Denied: Officer '{auth_user.get('name')}' (Role: {auth_user.get('role')}) lacks permission 'ACKNOWLEDGE_DISPATCH_ADVISORY'."
+                }).encode("utf-8"))
+                return
+
+            advisory_id = json_body.get("advisory_id", "")
+            controller_id = auth_user.get("user_id") if auth_user else json_body.get("controller_id", "CHIEF_DISPATCHER_01")
+            notes = json_body.get("notes", "")
+            client_ip = self.client_address[0] if hasattr(self, "client_address") else "127.0.0.1"
+            if not advisory_id:
+                self._set_headers(400)
+                self.wfile.write(json.dumps({"error": "advisory_id is required"}).encode("utf-8"))
+                return
+            ack_res = dispatch_advisory_service.acknowledge_advisory(
+                advisory_id=advisory_id,
+                controller_id=controller_id,
+                notes=notes,
+                ip_address=client_ip
+            )
+            self._set_headers(200)
+            self.wfile.write(json.dumps(ack_res).encode("utf-8"))
+            return
+
+        if path == "/api/v1/dispatch/advisory/apply":
+            auth_user = self._get_auth_user()
+            if auth_user and not auth_service.has_permission(auth_user, "APPLY_DISPATCH_RECOMMENDATION"):
+                self._set_headers(403)
+                self.wfile.write(json.dumps({
+                    "status": "ERROR",
+                    "error": f"Access Denied: Officer '{auth_user.get('name')}' (Role: {auth_user.get('role')}) lacks permission 'APPLY_DISPATCH_RECOMMENDATION'. Only Operations Controllers and Administrators can apply live dispatch recommendations."
+                }).encode("utf-8"))
+                return
+
+            advisory_id = json_body.get("advisory_id", "")
+            action_type = json_body.get("action_type", "GENERAL_ADVISORY")
+            action_payload = json_body.get("action_payload", {})
+            controller_id = auth_user.get("user_id") if auth_user else json_body.get("controller_id", "CHIEF_DISPATCHER_01")
+            notes = json_body.get("notes", "")
+            client_ip = self.client_address[0] if hasattr(self, "client_address") else "127.0.0.1"
+            if not advisory_id:
+                self._set_headers(400)
+                self.wfile.write(json.dumps({"error": "advisory_id is required"}).encode("utf-8"))
+                return
+            try:
+                apply_res = dispatch_advisory_service.apply_recommendation(
+                    advisory_id=advisory_id,
+                    action_type=action_type,
+                    action_payload=action_payload,
+                    controller_id=controller_id,
+                    notes=notes,
+                    ip_address=client_ip
+                )
+                self._set_headers(200)
+                self.wfile.write(json.dumps(apply_res).encode("utf-8"))
+            except ValueError as ve:
+                self._set_headers(400)
+                self.wfile.write(json.dumps({"status": "ERROR", "error": str(ve), "message": str(ve)}).encode("utf-8"))
+            except Exception as e:
+                self._set_headers(500)
+                self.wfile.write(json.dumps({"status": "ERROR", "error": str(e), "message": str(e)}).encode("utf-8"))
+            return
 
         # 2. Prioritization Engine POST Endpoints
         if path == "/api/v1/prioritization/evaluate":
@@ -769,7 +1407,7 @@ class RailSyncAPIHandler(BaseHTTPRequestHandler):
             multiplier = float(json_body.get("traffic_multiplier", 1.40))
             added_freight = int(json_body.get("added_freight_count", 6))
             delay_mins = int(json_body.get("delay_minutes_injection", 0))
-            corridor_id = json_body.get("corridor_id", "NDLS-HWH-01")
+            corridor_id = json_body.get("corridor_id", "MAS-TRL-05")
             requests = json_body.get("requests", repo.get_all_requests())
             trains = json_body.get("train_schedules", repo.get_all_trains())
             assets = repo.get_all_assets()
@@ -795,7 +1433,17 @@ class RailSyncAPIHandler(BaseHTTPRequestHandler):
 
         # 7. Safety Manual Controller Override
         if path == "/api/v1/safety/manual-override":
-            controller_id = json_body.get("controller_id", "CHIEF_CONTROLLER_01")
+            auth_user = self._get_auth_user()
+            if auth_user:
+                if not auth_service.has_permission(auth_user, "MANUAL_SAFETY_OVERRIDE"):
+                    self._set_headers(403)
+                    self.wfile.write(json.dumps({
+                        "status": "ERROR",
+                        "error": f"Access Denied: Officer '{auth_user.get('name')}' (Role: {auth_user.get('role')}) lacks clearance 'MANUAL_SAFETY_OVERRIDE'. Only Administrators can execute emergency safety overrides."
+                    }).encode("utf-8"))
+                    return
+
+            controller_id = auth_user.get("user_id") if auth_user else json_body.get("controller_id", "CHIEF_CONTROLLER_01")
             target_type = json_body.get("target_type", "BLOCK")
             target_id = str(json_body.get("target_id", "1"))
             original_status = json_body.get("original_status", "PENDING")
@@ -829,10 +1477,19 @@ class RailSyncAPIHandler(BaseHTTPRequestHandler):
 
         # 8. Emergency Replan with Guardrails
         if path == "/api/v1/optimize/emergency-replan":
+            auth_user = self._get_auth_user()
+            if auth_user and not auth_service.has_permission(auth_user, "EMERGENCY_REPLAN"):
+                self._set_headers(403)
+                self.wfile.write(json.dumps({
+                    "status": "ERROR",
+                    "error": f"Access Denied: Officer '{auth_user.get('name')}' (Role: {auth_user.get('role')}) lacks permission 'EMERGENCY_REPLAN'. Only Operations Controllers and Administrators can trigger corridor emergency replans."
+                }).encode("utf-8"))
+                return
+
             asset_id = json_body.get("asset_id", "TRK-01")
             duration = int(json_body.get("duration_minutes", 60))
             defect_type = json_body.get("defect_type", "RAIL_FRACTURE")
-            corridor_id = json_body.get("corridor_id", "NDLS-HWH-01")
+            corridor_id = json_body.get("corridor_id", "MAS-TRL-05")
 
             emergency_req = {
                 "id": 9999,
@@ -905,6 +1562,17 @@ class RailSyncAPIHandler(BaseHTTPRequestHandler):
 
         # 9. Approve Block
         if path == "/api/v1/optimize/approve-block":
+            auth_user = self._get_auth_user()
+            approve = bool(json_body.get("approve", True))
+            perm_needed = "APPROVE_PLAN" if approve else "REJECT_PLAN"
+            if auth_user and not auth_service.has_permission(auth_user, perm_needed):
+                self._set_headers(403)
+                self.wfile.write(json.dumps({
+                    "status": "ERROR",
+                    "error": f"Access Denied: Officer '{auth_user.get('name')}' (Role: {auth_user.get('role')}) lacks permission '{perm_needed}'. Only Operations Controllers and Administrators can approve or reject scheduled block plans."
+                }).encode("utf-8"))
+                return
+
             block_id = int(json_body.get("block_id", 0))
             approve = bool(json_body.get("approve", True))
             success = repo.update_block_approval(block_id, approve)
@@ -923,7 +1591,7 @@ class RailSyncAPIHandler(BaseHTTPRequestHandler):
 
         # 6. AI Insights
         if path == "/api/v1/insights/analyze":
-            corridor_id = json_body.get("corridor_id", "NDLS-HWH-01")
+            corridor_id = json_body.get("corridor_id", "MAS-TRL-05")
             requests = repo.get_all_requests()
             blocks = repo.get_all_blocks()
             crit_count = sum(1 for r in requests if r.get("defect_severity", 1) >= 4)
@@ -1024,6 +1692,15 @@ class RailSyncAPIHandler(BaseHTTPRequestHandler):
             return
 
         if path.startswith("/api/v1/optimize/delete-request/"):
+            auth_user = self._get_auth_user()
+            if auth_user and not auth_service.has_permission(auth_user, "DELETE_REQUEST"):
+                self._set_headers(403)
+                self.wfile.write(json.dumps({
+                    "status": "ERROR",
+                    "error": f"Access Denied: Officer '{auth_user.get('name')}' (Role: {auth_user.get('role')}) lacks permission 'DELETE_REQUEST'. Only Administrators can delete maintenance requests."
+                }).encode("utf-8"))
+                return
+
             try:
                 req_id = int(path.replace("/api/v1/optimize/delete-request/", "").strip())
                 success = repo.delete_request(req_id)
@@ -1043,17 +1720,32 @@ class RailSyncAPIHandler(BaseHTTPRequestHandler):
         self.wfile.write(json.dumps({"error": f"Endpoint DELETE {path} not found"}).encode("utf-8"))
 
 
+class ReusableThreadingServer(ThreadingHTTPServer):
+    allow_reuse_address = True
+    daemon_threads = True
+
+
 def run_server(port=8000, host="0.0.0.0"):
     server_address = (host, port)
-    httpd = HTTPServer(server_address, RailSyncAPIHandler)
-    print(f"[RailSync] Authoritative Python Backend listening on http://{host}:{port}")
-    try:
-        httpd.serve_forever()
-    except KeyboardInterrupt:
-        pass
-    finally:
-        httpd.server_close()
-        print("[RailSync] Python backend stopped.")
+    
+    for attempt in range(1, 6):
+        try:
+            httpd = ReusableThreadingServer(server_address, RailSyncAPIHandler)
+            print(f"[RailSync] Authoritative Python Backend listening on http://{host}:{port}")
+            try:
+                httpd.serve_forever()
+            except KeyboardInterrupt:
+                pass
+            finally:
+                httpd.server_close()
+                print("[RailSync] Python backend stopped.")
+            return
+        except OSError as e:
+            if e.errno == 98 and attempt < 5:
+                print(f"[RailSync] Port {port} in use (attempt {attempt}/5). Retrying in 1s...")
+                time.sleep(1)
+            else:
+                raise e
 
 
 if __name__ == "__main__":

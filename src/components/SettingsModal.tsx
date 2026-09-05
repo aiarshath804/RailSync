@@ -58,7 +58,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
       showHudTelemetry: true,
       autoConflictDetection: true,
       safetyBufferMinutes: 15,
-      stationId: "IR-NDLS-04",
+      stationId: "MAS-SR-01",
       autoScrollTimetable: true
     };
     setSettings(defaults);

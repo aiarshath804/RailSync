@@ -294,7 +294,7 @@ async def emergency_replan(req: EmergencyBlockRequest):
         "required_repair_duration": max(30, req.duration_minutes),
         "proposed_date": datetime.datetime.now().isoformat(),
         "inspector_notes": f"EMERGENCY REPAIR: {req.notes}",
-        "corridor_id": "NDLS-HWH-01",
+        "corridor_id": "MAS-TRL-05",
         "work_type": "EMERGENCY_REPAIR"
     }
     import_service.import_dataset("TMS", [emergency_dict], filename="emergency_trigger.json")
@@ -435,7 +435,7 @@ async def get_analytics_data():
 
 class InsightRequest(BaseModel):
     query: Optional[str] = None
-    corridor_id: Optional[str] = "NDLS-HWH-01"
+    corridor_id: Optional[str] = "MAS-TRL-05"
 
 @app.post("/api/v1/insights/analyze")
 async def analyze_insights(req: InsightRequest):

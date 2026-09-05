@@ -11,10 +11,13 @@ import {
   Cpu,
   Shield,
   X,
-  User
+  User,
+  LogOut,
+  KeyRound
 } from "lucide-react";
 import { motion, AnimatePresence } from "motion/react";
 import { Language, translations } from "../lib/translations";
+import { useAuth } from "../contexts/AuthContext";
 
 export type DepartmentCode = "TMS" | "SMMS" | "TDMS" | "AI_INSIGHTS";
 
@@ -54,13 +57,37 @@ export const Sidebar: React.FC<SidebarProps> = ({
   onCloseMobile
 }) => {
   const t = translations[lang] || translations.EN;
+  const { user, logout, canAccessDepartment, hasPermission } = useAuth();
 
-  const departments = [
+  const allDepartments = [
     { code: "TMS", label: t.tmsDept, icon: Train, badge: "98% Normal" },
     { code: "SMMS", label: t.smmsDept, icon: BarChart2, badge: "1 Warning" },
     { code: "TDMS", label: t.tdmsDept, icon: Share2, badge: "25kV Stable" },
     { code: "AI_INSIGHTS", label: t.aiDept, icon: Sparkles, badge: "Gemini 2.5" },
   ];
+
+  const departments = allDepartments.filter(
+    (dept) => dept.code === "AI_INSIGHTS" || canAccessDepartment(dept.code)
+  );
+
+  const getRoleBadgeStyle = (role?: string) => {
+    switch (role) {
+      case "ADMINISTRATOR":
+        return { bg: "bg-amber-600", border: "border-amber-400", text: "text-amber-400" };
+      case "ENGINEERING":
+        return { bg: "bg-emerald-600", border: "border-emerald-400", text: "text-emerald-400" };
+      case "TRACTION":
+        return { bg: "bg-cyan-600", border: "border-cyan-400", text: "text-cyan-400" };
+      case "SIGNAL_TELECOM":
+        return { bg: "bg-indigo-600", border: "border-indigo-400", text: "text-indigo-400" };
+      case "OPERATIONS_CONTROLLER":
+        return { bg: "bg-rose-600", border: "border-rose-400", text: "text-rose-400" };
+      default:
+        return { bg: "bg-blue-600", border: "border-amber-400", text: "text-amber-400" };
+    }
+  };
+
+  const roleStyle = getRoleBadgeStyle(user?.role);
 
   return (
     <>
@@ -116,17 +143,20 @@ export const Sidebar: React.FC<SidebarProps> = ({
             title="View Controller Profile & Shift Console"
           >
             <div className="relative">
-              <div className="w-9 h-9 rounded bg-blue-950 border border-amber-400 text-amber-400 flex items-center justify-center font-mono font-black text-xs shadow-xs">
-                RTC
+              <div className={`w-9 h-9 rounded ${roleStyle.bg} border ${roleStyle.border} text-white flex items-center justify-center font-mono font-black text-xs shadow-xs`}>
+                {user?.avatar_init || "RTC"}
               </div>
               <span className="absolute -bottom-0.5 -right-0.5 w-3 h-3 bg-emerald-500 border-2 border-slate-900 rounded-full animate-pulse"></span>
             </div>
-            <div>
-              <div className="text-xs font-black text-white flex items-center space-x-1 font-serif">
-                <span>Sector Controller</span>
+            <div className="flex-1 min-w-0">
+              <div className="text-xs font-black text-white flex items-center space-x-1 font-serif truncate">
+                <span>{user?.name || "Corridor Controller"}</span>
               </div>
-              <div className="text-[10px] text-slate-400 font-mono font-bold">
-                Console: <span className="text-amber-400">IR-NDLS-04</span>
+              <div className="text-[10px] text-slate-400 font-mono font-bold flex items-center justify-between">
+                <span>Console: <span className="text-amber-400">{user?.console_id || "MAS-SR-01"}</span></span>
+                <span className={`text-[8px] px-1 py-0.2 rounded font-bold uppercase ${roleStyle.text}`}>
+                  {user?.role ? user.role.split("_")[0] : "ADMIN"}
+                </span>
               </div>
             </div>
           </motion.div>
@@ -189,109 +219,121 @@ export const Sidebar: React.FC<SidebarProps> = ({
 
         {/* Bottom links & Emergency button */}
         <div className="space-y-1 pt-3 border-t border-slate-800">
-          <motion.button
-            onClick={() => {
-              if (onOpenSafetyGuardrail) onOpenSafetyGuardrail();
-              if (onCloseMobile) onCloseMobile();
-            }}
-            whileHover={{ x: 2 }}
-            className="w-full flex items-center justify-between px-3 py-2 rounded-md text-xs font-bold text-emerald-400 bg-slate-950 border border-emerald-500/40 hover:border-emerald-400 hover:bg-slate-900 transition cursor-pointer"
-          >
-            <div className="flex items-center space-x-2.5">
-              <Shield className="w-4 h-4 text-emerald-400" />
-              <span>Safety Engine (Step 4)</span>
-            </div>
-            <span className="text-[9px] px-1.5 py-0.2 rounded font-mono bg-emerald-950 text-emerald-300 border border-emerald-700">
-              GUARDRAILS
-            </span>
-          </motion.button>
+          {hasPermission("VIEW_SAFETY") && (
+            <motion.button
+              onClick={() => {
+                if (onOpenSafetyGuardrail) onOpenSafetyGuardrail();
+                if (onCloseMobile) onCloseMobile();
+              }}
+              whileHover={{ x: 2 }}
+              className="w-full flex items-center justify-between px-3 py-2 rounded-md text-xs font-bold text-emerald-400 bg-slate-950 border border-emerald-500/40 hover:border-emerald-400 hover:bg-slate-900 transition cursor-pointer"
+            >
+              <div className="flex items-center space-x-2.5">
+                <Shield className="w-4 h-4 text-emerald-400" />
+                <span>Safety Engine (Step 4)</span>
+              </div>
+              <span className="text-[9px] px-1.5 py-0.2 rounded font-mono bg-emerald-950 text-emerald-300 border border-emerald-700">
+                GUARDRAILS
+              </span>
+            </motion.button>
+          )}
 
-          <motion.button
-            onClick={() => {
-              if (onOpenPrioritization) onOpenPrioritization();
-              if (onCloseMobile) onCloseMobile();
-            }}
-            whileHover={{ x: 2 }}
-            className={`w-full flex items-center justify-between px-3 py-2 rounded-md text-xs font-bold transition cursor-pointer ${
-              activeTab === "prioritization"
-                ? "bg-amber-500 text-slate-950 shadow-xs border border-amber-400 font-black"
-                : "text-amber-400 bg-slate-950 border border-amber-500/40 hover:border-amber-400 hover:bg-slate-900"
-            }`}
-          >
-            <div className="flex items-center space-x-2.5">
-              <Cpu className="w-4 h-4 text-amber-400" />
-              <span>Prioritization (Step 3)</span>
-            </div>
-            <span className="text-[9px] px-1.5 py-0.2 rounded font-mono bg-amber-950 text-amber-300 border border-amber-700">
-              AI ENGINE
-            </span>
-          </motion.button>
+          {hasPermission("VIEW_PRIORITIZATION") && (
+            <motion.button
+              onClick={() => {
+                if (onOpenPrioritization) onOpenPrioritization();
+                if (onCloseMobile) onCloseMobile();
+              }}
+              whileHover={{ x: 2 }}
+              className={`w-full flex items-center justify-between px-3 py-2 rounded-md text-xs font-bold transition cursor-pointer ${
+                activeTab === "prioritization"
+                  ? "bg-amber-500 text-slate-950 shadow-xs border border-amber-400 font-black"
+                  : "text-amber-400 bg-slate-950 border border-amber-500/40 hover:border-amber-400 hover:bg-slate-900"
+              }`}
+            >
+              <div className="flex items-center space-x-2.5">
+                <Cpu className="w-4 h-4 text-amber-400" />
+                <span>Prioritization (Step 3)</span>
+              </div>
+              <span className="text-[9px] px-1.5 py-0.2 rounded font-mono bg-amber-950 text-amber-300 border border-amber-700">
+                AI ENGINE
+              </span>
+            </motion.button>
+          )}
 
-          <motion.button
-            onClick={() => {
-              if (onOpenDataPipeline) onOpenDataPipeline();
-              if (onCloseMobile) onCloseMobile();
-            }}
-            whileHover={{ x: 2 }}
-            className="w-full flex items-center justify-between px-3 py-2 rounded-md text-xs font-bold text-amber-400 bg-slate-950 border border-amber-500/40 hover:border-amber-400 hover:bg-slate-900 transition cursor-pointer"
-          >
-            <div className="flex items-center space-x-2.5">
-              <Cpu className="w-4 h-4 text-amber-400" />
-              <span>Data Pipeline (Step 2)</span>
-            </div>
-            <span className="text-[9px] px-1.5 py-0.2 rounded font-mono bg-amber-950 text-amber-300 border border-amber-700">
-              CSV/JSON
-            </span>
-          </motion.button>
+          {hasPermission("MANAGE_DATA_PIPELINE") && (
+            <motion.button
+              onClick={() => {
+                if (onOpenDataPipeline) onOpenDataPipeline();
+                if (onCloseMobile) onCloseMobile();
+              }}
+              whileHover={{ x: 2 }}
+              className="w-full flex items-center justify-between px-3 py-2 rounded-md text-xs font-bold text-amber-400 bg-slate-950 border border-amber-500/40 hover:border-amber-400 hover:bg-slate-900 transition cursor-pointer"
+            >
+              <div className="flex items-center space-x-2.5">
+                <Cpu className="w-4 h-4 text-amber-400" />
+                <span>Data Pipeline (Step 2)</span>
+              </div>
+              <span className="text-[9px] px-1.5 py-0.2 rounded font-mono bg-amber-950 text-amber-300 border border-amber-700">
+                CSV/JSON
+              </span>
+            </motion.button>
+          )}
 
-          <motion.button
-            onClick={() => {
-              if (onOpenAnalytics) onOpenAnalytics();
-              if (onCloseMobile) onCloseMobile();
-            }}
-            whileHover={{ x: 2 }}
-            className={`w-full flex items-center justify-between px-3 py-2 rounded-md text-xs font-bold transition cursor-pointer ${
-              activeTab === "analytics"
-                ? "bg-amber-500 text-slate-950 shadow-xs border border-amber-400"
-                : "text-slate-200 hover:text-white hover:bg-slate-800/90"
-            }`}
-          >
-            <div className="flex items-center space-x-2.5">
-              <Activity className={`w-4 h-4 ${activeTab === "analytics" ? "text-slate-950" : "text-amber-400"}`} />
-              <span>{t.navAnalytics}</span>
-            </div>
-            <span className={`text-[9px] px-1.5 py-0.2 rounded font-mono ${
-              activeTab === "analytics" ? "bg-slate-950 text-amber-300 font-bold" : "bg-emerald-950 text-emerald-300 border border-emerald-800"
-            }`}>
-              AUDIT
-            </span>
-          </motion.button>
+          {hasPermission("VIEW_ANALYTICS") && (
+            <motion.button
+              onClick={() => {
+                if (onOpenAnalytics) onOpenAnalytics();
+                if (onCloseMobile) onCloseMobile();
+              }}
+              whileHover={{ x: 2 }}
+              className={`w-full flex items-center justify-between px-3 py-2 rounded-md text-xs font-bold transition cursor-pointer ${
+                activeTab === "analytics"
+                  ? "bg-amber-500 text-slate-950 shadow-xs border border-amber-400"
+                  : "text-slate-200 hover:text-white hover:bg-slate-800/90"
+              }`}
+            >
+              <div className="flex items-center space-x-2.5">
+                <Activity className={`w-4 h-4 ${activeTab === "analytics" ? "text-slate-950" : "text-amber-400"}`} />
+                <span>{t.navAnalytics}</span>
+              </div>
+              <span className={`text-[9px] px-1.5 py-0.2 rounded font-mono ${
+                activeTab === "analytics" ? "bg-slate-950 text-amber-300 font-bold" : "bg-emerald-950 text-emerald-300 border border-emerald-800"
+              }`}>
+                AUDIT
+              </span>
+            </motion.button>
+          )}
 
-          <motion.button
-            onClick={() => {
-              if (onOpenMaintenance) onOpenMaintenance();
-              if (onCloseMobile) onCloseMobile();
-            }}
-            whileHover={{ x: 2 }}
-            className="w-full flex items-center space-x-2.5 px-3 py-2 rounded-md text-xs font-semibold text-slate-300 hover:text-white hover:bg-slate-800 transition cursor-pointer"
-          >
-            <Wrench className="w-4 h-4 text-amber-400" />
-            <span>Maintenance Windows</span>
-          </motion.button>
+          {hasPermission("VIEW_SCHEDULES") && (
+            <motion.button
+              onClick={() => {
+                if (onOpenMaintenance) onOpenMaintenance();
+                if (onCloseMobile) onCloseMobile();
+              }}
+              whileHover={{ x: 2 }}
+              className="w-full flex items-center space-x-2.5 px-3 py-2 rounded-md text-xs font-semibold text-slate-300 hover:text-white hover:bg-slate-800 transition cursor-pointer"
+            >
+              <Wrench className="w-4 h-4 text-amber-400" />
+              <span>Maintenance Windows</span>
+            </motion.button>
+          )}
 
-          <motion.button
-            onClick={() => {
-              if (onOpenLogs) onOpenLogs();
-              if (onCloseMobile) onCloseMobile();
-            }}
-            whileHover={{ x: 2 }}
-            className="w-full flex items-center space-x-2.5 px-3 py-2 rounded-md text-xs font-semibold text-slate-300 hover:text-white hover:bg-slate-800 transition cursor-pointer"
-          >
-            <History className="w-4 h-4 text-amber-400" />
-            <span>Dispatch History</span>
-          </motion.button>
+          {hasPermission("VIEW_AUDIT_LOGS") && (
+            <motion.button
+              onClick={() => {
+                if (onOpenLogs) onOpenLogs();
+                if (onCloseMobile) onCloseMobile();
+              }}
+              whileHover={{ x: 2 }}
+              className="w-full flex items-center space-x-2.5 px-3 py-2 rounded-md text-xs font-semibold text-slate-300 hover:text-white hover:bg-slate-800 transition cursor-pointer"
+            >
+              <History className="w-4 h-4 text-amber-400" />
+              <span>Dispatch History</span>
+            </motion.button>
+          )}
 
-          {!showEmergencyTop && (
+          {!showEmergencyTop && hasPermission("EMERGENCY_REPLAN") && (
             <motion.button
               onClick={() => {
                 onEmergencyStop();
@@ -305,6 +347,22 @@ export const Sidebar: React.FC<SidebarProps> = ({
               <span>EMERGENCY NETWORK HALT</span>
             </motion.button>
           )}
+
+          {/* Quick Sign Out button in sidebar */}
+          <motion.button
+            onClick={() => {
+              logout();
+              if (onCloseMobile) onCloseMobile();
+            }}
+            whileHover={{ x: 2 }}
+            className="w-full flex items-center justify-between px-3 py-2 rounded-md text-xs font-semibold text-slate-400 hover:text-rose-300 hover:bg-slate-800/80 transition cursor-pointer pt-2 mt-1 border-t border-slate-800/60"
+          >
+            <div className="flex items-center space-x-2.5">
+              <LogOut className="w-3.5 h-3.5 text-slate-400" />
+              <span>Sign Out Session</span>
+            </div>
+            <span className="text-[9px] font-mono text-slate-400">{user?.console_id || "CONSOLE"}</span>
+          </motion.button>
         </div>
       </aside>
     </>

@@ -111,12 +111,10 @@ class LocationNormalizer:
     @classmethod
     def normalize_corridor(cls, raw: Optional[str]) -> str:
         if not raw:
-            return "NDLS-HWH-01"
+            return "MAS-TRL-05"
         
         s = str(raw).strip()
         # Remove redundant words like 'Corridor', 'Section', 'Line', etc.
-        # e.g., "NDLS-CNB Section 07" -> "NDLS-CNB-07"
-        # "ndls_cnb_07" -> "NDLS-CNB-07"
         s = s.replace("_", "-").replace("/", "-").replace(" ", "-")
         # Collapse multiple dashes
         s = re.sub(r"-+", "-", s)
@@ -127,21 +125,11 @@ class LocationNormalizer:
         s = re.sub(r"-SECTION$", "", s)
         s = re.sub(r"-CORRIDOR$", "", s)
         
-        # Common canonical railway corridors
-        if "NDLS" in s and "HWH" in s:
-            if "02" in s or "DN" in s or "DOWN" in s:
-                return "NDLS-HWH-02"
-            return "NDLS-HWH-01"
-        if "NDLS" in s and "CNB" in s:
-            num_match = re.search(r"(\d+)", s)
-            num = num_match.group(1).zfill(2) if num_match else "01"
-            return f"NDLS-CNB-{num}"
-        if "CNB" in s and "MGS" in s:
-            num_match = re.search(r"(\d+)", s)
-            num = num_match.group(1).zfill(2) if num_match else "01"
-            return f"CNB-MGS-{num}"
-        if "HWH" in s and "MGS" in s:
-            return "MGS-HWH-01"
+        # Canonical MAS-TRL railway corridors
+        if any(station in s for station in ["MAS", "TRL", "BBQ", "PER", "ABU", "AVD", "CHENNAI", "TIRUVALLUR"]):
+            return "MAS-TRL-05"
+        
+        return "MAS-TRL-05"
 
         return s.strip("-")
 

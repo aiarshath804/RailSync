@@ -46,7 +46,7 @@ export const CadMapModal: React.FC<CadMapModalProps> = ({
   assetId = "TRK-01",
   assetTitle = "Track Segment & Interlocking Schematics",
   assetType = "High-Speed Rail / Signal Interlock",
-  location = "North Corridor, KM 4.2 - 12.0",
+  location = "MAS-TRL Block B1: Chennai Central – Basin Bridge (KM 0.0 - 2.2)",
   onCreateWorkOrder
 }) => {
   const [zoomLevel, setZoomLevel] = useState<number>(100);

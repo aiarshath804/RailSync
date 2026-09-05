@@ -80,8 +80,8 @@ def init_db():
         department_code TEXT NOT NULL DEFAULT 'TMS',
         asset_id TEXT NOT NULL,
         asset_type TEXT DEFAULT 'TRACK',
-        corridor_id TEXT DEFAULT 'NDLS-HWH-01',
-        section_id TEXT DEFAULT 'NDLS-HWH-01',
+        corridor_id TEXT DEFAULT 'MAS-TRL-05',
+        section_id TEXT DEFAULT 'MAS-TRL-05',
         location_start_km REAL DEFAULT 0.0,
         location_end_km REAL DEFAULT 5.0,
         work_type TEXT DEFAULT 'MAINTENANCE',
@@ -218,16 +218,17 @@ def init_db():
         INSERT INTO corridor_assets (id, asset_id, name, asset_type, line_section, start_km, end_km, speed_limit_kmh, status)
         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?);
         """, [
-            (1, "TRK-01", "Track Segment UP-1", "TRACK", "NDLS-HWH-01", 0.0, 15.0, 130, "OPERATIONAL"),
-            (2, "TRK-02", "Track Segment DN-2", "TRACK", "NDLS-HWH-01", 15.0, 30.0, 110, "OPERATIONAL"),
-            (3, "SIG-44", "Signal Post Block 12", "SIGNAL", "NDLS-HWH-01", 8.5, 8.6, 130, "OPERATIONAL"),
-            (4, "OHE-09", "Catenary Tension Mast 5", "OHE", "NDLS-HWH-01", 22.4, 24.1, 110, "OPERATIONAL"),
-            (5, "TRK-03", "Track Segment CNB-Loop", "TRACK", "NDLS-CNB-07", 310.0, 325.0, 120, "OPERATIONAL"),
-            (6, "SIG-88", "Interlocking Point 102A", "SIGNAL", "NDLS-CNB-07", 312.4, 312.6, 120, "OPERATIONAL"),
-            (7, "OHE-22", "Substation Feeder Mast 8", "OHE", "NDLS-CNB-07", 311.0, 315.0, 120, "OPERATIONAL"),
-            (8, "TRK-04", "Track Segment MGS-Trunk", "TRACK", "CNB-MGS-01", 448.0, 460.0, 120, "OPERATIONAL"),
-            (9, "SIG-92", "Axle Counter Zone 4", "SIGNAL", "CNB-MGS-01", 450.0, 452.0, 120, "OPERATIONAL"),
-            (10, "OHE-35", "Traction Portal 14", "OHE", "CNB-MGS-01", 450.0, 455.0, 120, "OPERATIONAL"),
+            (1, "TRK-01", "MAS-BBQ Up Slow Line Track Bed", "TRACK", "MAS-TRL-05 (B1)", 0.0, 2.2, 45, "OPERATIONAL"),
+            (2, "TRK-02", "BBQ-PER Quadruple Fast Crossover Bed", "TRACK", "MAS-TRL-05 (B2)", 2.2, 5.6, 80, "OPERATIONAL"),
+            (3, "SIG-44", "BBQ Junction Route Relay Interlocking Signal 44", "SIGNAL", "MAS-TRL-05 (B1/B2)", 2.1, 2.2, 45, "OPERATIONAL"),
+            (4, "OHE-09", "MAS Throat 25kV Traction Feeder Mast 09", "OHE", "MAS-TRL-05 (B1)", 0.5, 1.8, 45, "OPERATIONAL"),
+            (5, "TRK-03", "PER-ABU Down Fast Trunk Rail", "TRACK", "MAS-TRL-05 (B3)", 5.6, 15.0, 90, "OPERATIONAL"),
+            (6, "SIG-88", "Ambattur Interlocking Automatic Signal 88", "SIGNAL", "MAS-TRL-05 (B3)", 14.2, 14.8, 90, "OPERATIONAL"),
+            (7, "OHE-22", "Villivakkam Substation Feeder Mast 22", "OHE", "MAS-TRL-05 (B3)", 9.0, 12.5, 90, "OPERATIONAL"),
+            (8, "TRK-04", "ABU-AVD EMU Shed Approach Rail Bed", "TRACK", "MAS-TRL-05 (B4)", 15.0, 21.4, 100, "OPERATIONAL"),
+            (9, "SIG-92", "Avadi Yard Entry Multi-Aspect Signal 92", "SIGNAL", "MAS-TRL-05 (B4)", 20.8, 21.2, 100, "OPERATIONAL"),
+            (10, "OHE-35", "Avadi-TRL High-Speed Catenary Section 35", "OHE", "MAS-TRL-05 (B5)", 22.0, 38.0, 110, "OPERATIONAL"),
+            (11, "TRK-05", "AVD-TRL High-Speed Trunk Main Bed", "TRACK", "MAS-TRL-05 (B5)", 21.4, 41.8, 110, "OPERATIONAL"),
         ])
 
     # Seed Baseline Train Schedules if empty
@@ -238,9 +239,11 @@ def init_db():
         INSERT INTO train_schedules (id, train_number, name, priority_class, corridor_id, section_id, arrival_window_start, departure_window_end, delay_minutes, status)
         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?);
         """, [
-            (1, "12301", "Howrah Rajdhani Express", "RAJDHANI", "NDLS-HWH-01", "NDLS-HWH-01", (now + datetime.timedelta(hours=2)).isoformat(), (now + datetime.timedelta(hours=3, minutes=30)).isoformat(), 0, "RUNNING"),
-            (2, "12260", "Sealdah Duronto Express", "EXPRESS", "NDLS-HWH-01", "NDLS-HWH-01", (now + datetime.timedelta(hours=4)).isoformat(), (now + datetime.timedelta(hours=5, minutes=15)).isoformat(), 0, "RUNNING"),
-            (3, "FRT-991", "Coal Rake Special", "FREIGHT", "NDLS-HWH-01", "NDLS-HWH-01", (now + datetime.timedelta(hours=6)).isoformat(), (now + datetime.timedelta(hours=8)).isoformat(), 30, "DELAYED +30m")
+            (1, "12601", "Mangalore Mail", "SUPERFAST_EXPRESS", "MAS-TRL-05", "B1: MAS → BBQ", (now + datetime.timedelta(minutes=15)).isoformat(), (now + datetime.timedelta(minutes=45)).isoformat(), 0, "RUNNING"),
+            (2, "20607", "Mysuru Vande Bharat Express", "VANDE_BHARAT", "MAS-TRL-05", "B5: AVD → TRL", (now + datetime.timedelta(minutes=30)).isoformat(), (now + datetime.timedelta(hours=1)).isoformat(), 0, "RUNNING"),
+            (3, "43011", "Moore Market - Tiruvallur Suburban EMU", "SUBURBAN_EMU", "MAS-TRL-05", "B3: PER → ABU", (now + datetime.timedelta(minutes=45)).isoformat(), (now + datetime.timedelta(hours=1, minutes=15)).isoformat(), 0, "RUNNING"),
+            (4, "12657", "Chennai - Bengaluru Mail", "MAIL_EXPRESS", "MAS-TRL-05", "B2: BBQ → PER", (now + datetime.timedelta(hours=1, minutes=15)).isoformat(), (now + datetime.timedelta(hours=1, minutes=45)).isoformat(), 0, "RUNNING"),
+            (5, "FRT-402", "Arakkonam Container Freight Rake", "FREIGHT", "MAS-TRL-05", "B4: ABU → AVD", (now + datetime.timedelta(hours=2)).isoformat(), (now + datetime.timedelta(hours=3)).isoformat(), 15, "CAUTION_RESTRICTED")
         ])
 
     conn.commit()

@@ -360,7 +360,7 @@ export const DataPipelineModal: React.FC<DataPipelineModalProps> = ({
                       title: "TMS Track Defects Dataset",
                       path: "data/tms_sample.csv",
                       count: "50 records",
-                      corridors: "NDLS-HWH-01, NDLS-CNB-07, CNB-MGS-01",
+                      corridors: "MAS-TRL-05 (Blocks B1–B5)",
                       types: "Weld fractures, gauge widening, acoustic anomalies, sleeper wear",
                       badge: "bg-blue-900/60 text-blue-300 border-blue-700/50"
                     },
@@ -369,7 +369,7 @@ export const DataPipelineModal: React.FC<DataPipelineModalProps> = ({
                       title: "SMMS Signal Faults Dataset",
                       path: "data/smms_sample.csv",
                       count: "30 records",
-                      corridors: "NDLS-HWH-01, NDLS-CNB-07, CNB-MGS-01",
+                      corridors: "MAS-TRL-05 (Blocks B1–B5)",
                       types: "Point machine overload, lamp failures, axle counter drift",
                       badge: "bg-emerald-900/60 text-emerald-300 border-emerald-700/50"
                     },
@@ -378,7 +378,7 @@ export const DataPipelineModal: React.FC<DataPipelineModalProps> = ({
                       title: "TDMS OHE Traction Dataset",
                       path: "data/tdms_sample.csv",
                       count: "25 records",
-                      corridors: "NDLS-HWH-01, NDLS-CNB-07, CNB-MGS-01",
+                      corridors: "MAS-TRL-05 (Blocks B1–B5)",
                       types: "Catenary wire tension loss, dropper wear, isolator flashover",
                       badge: "bg-amber-900/60 text-amber-300 border-amber-700/50"
                     },
@@ -387,8 +387,8 @@ export const DataPipelineModal: React.FC<DataPipelineModalProps> = ({
                       title: "COA Train Timetable Dataset",
                       path: "data/coa_sample.csv",
                       count: "37 schedules",
-                      corridors: "Trunk corridors NDLS-HWH, NDLS-CNB, CNB-MGS",
-                      types: "Rajdhani, Vande Bharat, Duronto, Freight rake paths",
+                      corridors: "Trunk corridor MAS-TRL (B1–B5 Quadruple Lines)",
+                      types: "Mangalore Mail, Vande Bharat, Suburban EMU, Freight rake paths",
                       badge: "bg-purple-900/60 text-purple-300 border-purple-700/50"
                     },
                   ].map((ds) => (

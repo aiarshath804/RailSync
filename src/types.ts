@@ -40,6 +40,7 @@ export interface MaintenanceRequest {
   department_code: "TMS" | "SMMS" | "TDMS" | string;
   source_system?: string;
   asset_id: string;
+  corridor_id?: string;
   asset_type?: string;
   defect_type?: string;
   work_type?: string;
@@ -280,5 +281,159 @@ export interface Step6Scenario {
   comparison_report?: BaselineComparisonReport;
   verification_passed: boolean;
   verification_notes: string;
+}
+
+// -------------------------------------------------------------
+// North Tamil Nadu Corridor & Real-Time RailRadar Types
+// -------------------------------------------------------------
+export type CorridorBlockId = "B1" | "B2" | "B3" | "B4" | "B5";
+
+export type BlockOperationalStatus = 
+  | "AVAILABLE" 
+  | "NORMAL"
+  | "OCCUPIED" 
+  | "APPROACHING" 
+  | "CONGESTED" 
+  | "RESERVED" 
+  | "EMERGENCY_CLOSED";
+
+export interface LiveTrain {
+  id?: string;
+  train_number: string;
+  train_name: string;
+  type?: string;
+  source?: string;
+  destination?: string;
+  current_block?: string;
+  assigned_block?: string;
+  assigned_block_id?: string;
+  currentBlockId?: string;
+  direction?: "DOWN" | "UP" | string;
+  current_station?: string;
+  previous_station?: string;
+  next_station?: string;
+  segment_progress?: number;
+  relative_progress?: number;
+  progress?: number;
+  speed_kmh: number;
+  delay_minutes: number;
+  running_status?: string;
+  status?: string;
+  cancellation_status?: string;
+  diversion_status?: string;
+  is_simulation?: boolean;
+  last_updated?: string;
+  [key: string]: any;
+}
+
+export interface CorridorStation {
+  id?: string;
+  code: string;
+  name: string;
+  km: number;
+  sequence?: number;
+  is_terminal?: boolean;
+}
+
+export interface CorridorBlockState {
+  id?: string;
+  block_id: string;
+  name: string;
+  sequence?: number;
+  startStationId?: string;
+  endStationId?: string;
+  from_station: string;
+  to_station: string;
+  from_code?: string;
+  to_code?: string;
+  start_km?: number;
+  end_km?: number;
+  length_km: number;
+  speed_limit_kmh?: number;
+  max_speed_kmh?: number;
+  track_count?: number;
+  line_type?: string;
+  description?: string;
+  status?: BlockOperationalStatus | string;
+  operational_status?: string;
+  signal_aspect?: "GREEN" | "YELLOW" | "RED" | string;
+  trains?: LiveTrain[];
+  active_trains?: LiveTrain[];
+  active_train_count?: number;
+  occupancy_count?: number;
+  occupancy_percent?: number;
+  is_emergency_closed?: boolean;
+  work_orders?: any[];
+  emergency_details?: any;
+  conflict_detected?: boolean;
+  conflict_details?: any;
+  active_maintenance?: any;
+  [key: string]: any;
+}
+
+export interface CorridorLiveState {
+  corridor_title: string;
+  corridor_code: string;
+  section: string;
+  prototype_disclaimer: string;
+  mode: "LIVE" | "CACHED" | "SIMULATION";
+  data_source: string;
+  last_updated: string;
+  blocks: CorridorBlockState[];
+  active_trains: LiveTrain[];
+  total_active_trains: number;
+  stations: CorridorStation[];
+  active_emergency_count: number;
+  emergency_closures: any[];
+}
+
+export interface EmergencyHaltInput {
+  block_id: CorridorBlockId;
+  department: "TMS" | "SMMS" | "TDMS" | "OPERATIONS";
+  emergency_type: string;
+  severity: number;
+  description: string;
+  controller_id?: string;
+}
+
+// -------------------------------------------------------------
+// Authentication & Role-Based Access Control (RBAC) Types
+// -------------------------------------------------------------
+export type UserRole =
+  | "ADMINISTRATOR"
+  | "ENGINEERING"
+  | "TRACTION"
+  | "SIGNAL_TELECOM"
+  | "OPERATIONS_CONTROLLER";
+
+export interface AuthUser {
+  user_id: string;
+  email: string;
+  name: string;
+  role: UserRole;
+  department: string;
+  department_name: string;
+  designation: string;
+  console_id: string;
+  avatar_init: string;
+  badge_level: string;
+  shift?: string;
+  permissions: string[];
+}
+
+export interface DemoAccount {
+  role: UserRole;
+  role_label: string;
+  name: string;
+  email: string;
+  password?: string;
+  department: string;
+  department_name: string;
+  designation: string;
+  badge_level: string;
+  console_id: string;
+  avatar_init: string;
+  color: string;
+  description: string;
 }
 

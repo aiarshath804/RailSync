@@ -274,7 +274,7 @@ export const RailSyncAPI = {
     return res.json();
   },
 
-  async getAIInsights(corridorId: string = "NDLS-HWH-01"): Promise<{
+  async getAIInsights(corridorId: string = "MAS-TRL-05"): Promise<{
     corridor_id: string;
     critical_alerts: number;
     recommendation: string;

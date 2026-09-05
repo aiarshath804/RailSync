@@ -77,7 +77,7 @@ export const PrioritizationView: React.FC<PrioritizationViewProps> = ({
   const [sandboxDefectType, setSandboxDefectType] = useState<string>("RAIL FRACTURE");
   const [sandboxSeverity, setSandboxSeverity] = useState<number>(5);
   const [sandboxSlaHours, setSandboxSlaHours] = useState<number>(4);
-  const [sandboxCorridor, setSandboxCorridor] = useState<string>("NDLS-HWH-01");
+  const [sandboxCorridor, setSandboxCorridor] = useState<string>("MAS-TRL-05");
   const [sandboxNotes, setSandboxNotes] = useState<string>("Severe ultrasonic echo crack detected near switch blade");
   const [sandboxResult, setSandboxResult] = useState<any | null>(null);
   const [isEvaluatingSandbox, setIsEvaluatingSandbox] = useState<boolean>(false);
@@ -538,7 +538,7 @@ export const PrioritizationView: React.FC<PrioritizationViewProps> = ({
                               {dept}
                             </span>
                             <span className="text-xs text-slate-500 font-mono">
-                              {req.corridor_id || "NDLS-HWH-01"}
+                              {req.corridor_id || "MAS-TRL-05"}
                             </span>
                             {getTierBadge(req.priority_level, isOverride)}
                           </div>
@@ -772,7 +772,7 @@ export const PrioritizationView: React.FC<PrioritizationViewProps> = ({
                     <div className="flex items-center justify-between pb-3 border-b border-slate-200">
                       <div>
                         <span className="px-2 py-0.5 rounded text-[11px] font-bold bg-blue-100 text-blue-800">High-Density Trunk</span>
-                        <h4 className="font-bold text-slate-900 text-base mt-1">NDLS-HWH-01 (Rajdhani Line)</h4>
+                        <h4 className="font-bold text-slate-900 text-base mt-1">MAS-TRL-05 (Chennai Central – Tiruvallur Main Line)</h4>
                       </div>
                       <span className="text-2xl font-bold font-mono text-blue-600">
                         {activeScenario.trunk_evaluation.priority_score.toFixed(1)}
@@ -1003,9 +1003,9 @@ export const PrioritizationView: React.FC<PrioritizationViewProps> = ({
                 onChange={(e) => setSandboxCorridor(e.target.value)}
                 className="w-full p-2.5 border border-slate-300 rounded-lg text-xs font-medium focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500"
               >
-                <option value="NDLS-HWH-01">NDLS-HWH-01 (High Speed Rajdhani Trunk)</option>
-                <option value="NDLS-CNB-02">NDLS-CNB-02 (Heavy Passenger + Freight)</option>
-                <option value="BRANCH-LINE-09">BRANCH-LINE-09 (Low Density Feeder)</option>
+                <option value="MAS-TRL-05">MAS-TRL-05 (Chennai Central - Tiruvallur Quadruple Trunk)</option>
+                <option value="MAS-BBQ-B1">MAS-BBQ-B1 (Terminal Throat Block B1)</option>
+                <option value="AVD-TRL-B5">AVD-TRL-B5 (High-Speed Outer Block B5)</option>
               </select>
             </div>
           </div>

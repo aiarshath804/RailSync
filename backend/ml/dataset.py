@@ -39,7 +39,7 @@ DEFECT_TYPES_BY_DEPT = {
     ]
 }
 
-CORRIDORS = ["NDLS-HWH-01", "NDLS-CNB-07", "CNB-MGS-01", "HWH-MGS-03"]
+CORRIDORS = ["MAS-TRL-05", "MAS-BBQ-B1", "BBQ-PER-B2", "PER-ABU-B3", "ABU-AVD-B4", "AVD-TRL-B5"]
 
 
 class DatasetService:
